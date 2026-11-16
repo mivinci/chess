@@ -92,6 +92,7 @@
       tx: number;
       ty: number;
       capturing: boolean;
+      moving: boolean;
     }[] = [];
     for (let i = 0; i < 90; i++) {
       const id = pieceIds[i];
@@ -101,7 +102,8 @@
         index: i,
         tx: squares[i].tx,
         ty: squares[i].ty,
-        capturing: lastMove !== null && lastMove.captured !== 0 && lastMove.to === i
+        capturing: lastMove !== null && lastMove.captured !== 0 && lastMove.to === i,
+        moving: lastMove !== null && lastMove.to === i
       });
     }
     return result;
@@ -332,6 +334,7 @@
       <div
         class="piece-position"
         class:capturing={item.capturing}
+        class:moving={item.moving}
         data-piece-id={item.id}
         style:transform="translate({item.tx}%, {item.ty}%)"
         out:captureOut
@@ -479,6 +482,11 @@
 
   .black {
     color: #2a231c;
+  }
+
+  /* 落子瞬间让选中放大立即归位，避免 140ms 回弹叠在位移上看着像偏一下 */
+  .piece-position.moving .piece {
+    transition: none;
   }
 
   /* 吃子方：只动 transform / opacity，走合成层，避免逐帧重绘阴影 */
