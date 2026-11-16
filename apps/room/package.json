@@ -1,0 +1,12 @@
+{
+  "name": "@chinese-chess/room",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --local",
+    "deploy": "wrangler deploy",
+    "check": "wrangler types && tsc --noEmit -p tsconfig.json",
+    "gen": "wrangler types"
+  }
+}

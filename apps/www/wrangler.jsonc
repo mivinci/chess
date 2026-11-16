@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "chinese-chess",
+  "compatibility_date": "2026-11-16",
+  "compatibility_flags": [
+    "nodejs_als"
+  ],
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "vars": {
+    "ROOM_TOKEN_SECRET": "dev-only-change-me-in-production"
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".svelte-kit/cloudflare"
+  },
+  "routes": [
+    {
+      "pattern": "chess.le0.me",
+      "custom_domain": true
+    }
+  ],
+  "workers_dev": true,
+  "preview_urls": true
+}
