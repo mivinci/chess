@@ -138,10 +138,7 @@
   {@render children()}
 
   <footer class="mt-10 border-t border-border/60 px-4 py-6">
-    <div
-      class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-2 text-xs text-muted-foreground sm:flex-row"
-    >
-      <span>中国象棋 · 在浏览器里下棋</span>
+    <div class="mx-auto flex max-w-5xl justify-center text-xs text-muted-foreground">
       <a
         href="https://github.com/mivinci/chess"
         target="_blank"
