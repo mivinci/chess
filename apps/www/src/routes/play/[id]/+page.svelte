@@ -209,6 +209,12 @@
         selected = null;
         targets = [];
         recorded = false;
+        if (aiWorker) {
+          aiWorker.terminate();
+          aiWorker = null;
+          aiThinking = false;
+          ensureAiWorker(); // 中断旧局面的搜索，重建后由 effect 触发新局搜索
+        }
       } else if (type === 'leave') {
         players = players.filter((p) => p.side !== (msg.side as Side));
       } else if (type === 'error') {
@@ -366,7 +372,7 @@
   });
 
   onMount(() => {
-    tickTimer = setInterval(() => (now = Date.now()), 250);
+    tickTimer = setInterval(() => (now = Date.now()), 1000);
     connect();
     // 刷新后自动恢复 AI（sessionStorage 标记）
     if (sessionStorage.getItem(AI_STORAGE_KEY) === '1') {

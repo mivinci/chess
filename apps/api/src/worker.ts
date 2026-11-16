@@ -77,7 +77,26 @@ app.get('/boards', async (c) => {
        LIMIT 10`;
   const stmt = c.env.BOARDS_DB.prepare(sql);
   const rows = await (exact ? stmt.bind(parent, step) : stmt).all();
-  return c.json({ boards: rows.results }, 200, CORS);
+
+  // 榜单只需前 step 步画缩略图；完整棋谱留给精确查询（观看用），避免响应体随棋局增长
+  const boards = exact
+    ? rows.results
+    : rows.results.map((row) => {
+        const item = row as Record<string, unknown>;
+        try {
+          const history = JSON.parse(String(item.history)) as unknown[];
+          const notations = JSON.parse(String(item.notations)) as unknown[];
+          const step = Number(item.step);
+          return {
+            ...item,
+            history: JSON.stringify(history.slice(0, step)),
+            notations: JSON.stringify(notations.slice(0, step))
+          };
+        } catch {
+          return item;
+        }
+      });
+  return c.json({ boards }, 200, CORS);
 });
 
 app.get('/ws/match', (c) => {

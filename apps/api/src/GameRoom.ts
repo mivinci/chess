@@ -35,6 +35,9 @@ const TURN_MOVES_KEY = 'turnMoves';
 const GRACE_SCHEDULED_KEY = 'graceScheduled';
 const RESULT_KEY = 'result';
 const END_REASON_KEY = 'endReason';
+/** 终局后多少天清理棋谱存储（保留结果与分支元数据） */
+const ARCHIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const CLEANUP_AT_KEY = 'cleanupAt';
 
 interface Snapshot {
   board: number[];
@@ -58,12 +61,29 @@ export class GameRoom extends DurableObject {
     this.state = state;
   }
 
-  /** 供分支房间通过 DO RPC 读取历史 */
-  async getHistory(): Promise<{ history: Move[]; notations: string[] }> {
-    return {
-      history: (await this.state.storage.get<Move[]>('history')) ?? [],
-      notations: (await this.state.storage.get<string[]>('notations')) ?? []
-    };
+  /** 供分支房间通过 DO RPC 读取历史。DO 存储过期后从 D1 board 表兜底，保证分支链不断 */
+  async getHistory(roomId?: string): Promise<{ history: Move[]; notations: string[] }> {
+    const history = (await this.state.storage.get<Move[]>('history')) ?? [];
+    const notations = (await this.state.storage.get<string[]>('notations')) ?? [];
+    if (history.length > 0) return { history, notations };
+
+    // 本房间棋谱已清理：从 board 表找一条引用了本房间历史的行，拿它存的完整快照
+    const lookupId = roomId?.toUpperCase();
+    if (!lookupId || !/^[A-Z0-9]{4,12}$/.test(lookupId)) return { history, notations };
+    try {
+      const row = await this.env.BOARDS_DB.prepare(
+        'SELECT history, notations FROM boards WHERE parent_id = ? LIMIT 1'
+      )
+        .bind(lookupId)
+        .first<{ history: string; notations: string }>();
+      if (!row) return { history, notations };
+      return {
+        history: JSON.parse(row.history) as Move[],
+        notations: JSON.parse(row.notations) as string[]
+      };
+    } catch {
+      return { history, notations };
+    }
   }
 
   /** 人机对局存档：把历史写入一个纯数据 DO，供日后分支 */
@@ -105,7 +125,7 @@ export class GameRoom extends DurableObject {
     try {
       const id = this.env.GAME_ROOM.idFromName(parentId);
       const parent = this.env.GAME_ROOM.get(id);
-      const { history, notations } = await parent.getHistory();
+      const { history, notations } = await parent.getHistory(parentId);
       // 父局还没走到 step 步，视为失败，不要截出半截棋
       if (history.length < step) throw new Error('parent history too short');
       const prefix = history.slice(0, step);
@@ -192,8 +212,23 @@ export class GameRoom extends DurableObject {
     await this.state.storage.deleteAlarm();
   }
 
+  /** 终局后安排一次棋谱清理；alarm 到期时根据 cleanupAt 区分清理与超时 */
+  private async scheduleCleanup(): Promise<void> {
+    await this.state.storage.put(CLEANUP_AT_KEY, Date.now() + ARCHIVE_TTL_MS);
+    await this.state.storage.setAlarm(Date.now() + ARCHIVE_TTL_MS);
+  }
+
   /** 超时判负：带宽限窗口 + 步数核对，避免最后一秒的走子被误判 */
   async alarm(): Promise<void> {
+    // 清理 alarm：删棋谱存储，保留结果与分支元数据（房间状态仍正确，分支仍能追溯）
+    const cleanupAt = await this.state.storage.get<number>(CLEANUP_AT_KEY);
+    if (cleanupAt !== undefined && Date.now() >= cleanupAt) {
+      await this.state.storage.delete(CLEANUP_AT_KEY);
+      await this.state.storage.delete('history');
+      await this.state.storage.delete('notations');
+      return;
+    }
+
     const deadline = await this.state.storage.get<number>(DEADLINE_KEY);
     const turnAt = await this.state.storage.get<Side>(TURN_KEY);
     if (turnAt === undefined) return;
@@ -219,6 +254,7 @@ export class GameRoom extends DurableObject {
     const loser = turnAt;
     const result: GameStatus = loser === 1 ? 'black-win' : 'red-win';
     await this.state.storage.put({ [RESULT_KEY]: result, [END_REASON_KEY]: 'timeout' });
+    await this.scheduleCleanup();
     this.broadcast(this.seats(), { type: 'timeout', loser, status: result });
   }
 
@@ -311,6 +347,7 @@ export class GameRoom extends DurableObject {
       if (game.status !== 'playing') {
         await this.stopClock();
         await this.state.storage.put({ [RESULT_KEY]: game.status, [END_REASON_KEY]: 'checkmate' });
+        await this.scheduleCleanup();
       }
       const deadline =
         game.status === 'playing' ? await this.startClock(game.turn, game.history.length) : null;
@@ -327,6 +364,7 @@ export class GameRoom extends DurableObject {
       await this.state.storage.put({ history: [], notations: [] });
       await this.state.storage.delete(RESULT_KEY);
       await this.state.storage.delete(END_REASON_KEY);
+      await this.state.storage.delete(CLEANUP_AT_KEY);
       const deadline = await this.startClock(1, 0);
       const fresh = new ChessGame();
       this.broadcast(seats, {

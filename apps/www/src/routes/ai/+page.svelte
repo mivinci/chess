@@ -186,7 +186,7 @@
   }
 
   function newGame() {
-    requestId++;
+    cancelSearch();
     recordCurrentGame();
     game.reset();
     recorded = false;
@@ -200,7 +200,7 @@
   }
 
   function undo() {
-    requestId++;
+    cancelSearch();
     thinking = false;
     recorded = false;
     hinting = false;
@@ -217,7 +217,7 @@
     newGame();
   }
 
-  onMount(() => {
+  function setupWorker() {
     worker = new Worker(new URL('../../lib/chess/ai.worker.ts', import.meta.url), {
       type: 'module'
     });
@@ -251,6 +251,17 @@
         if (gameStatus !== 'playing') recordCurrentGame();
       }, remaining);
     };
+  }
+
+  /** 立即中断正在进行的搜索：terminate 是唯一能真正停止同步循环的方式 */
+  function cancelSearch() {
+    requestId++;
+    worker?.terminate();
+    setupWorker();
+  }
+
+  onMount(() => {
+    setupWorker();
     return () => worker?.terminate();
   });
 </script>
