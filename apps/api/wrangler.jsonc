@@ -1,14 +1,18 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "chinese-chess-room",
-  "main": "src/index.ts",
+  "name": "chinese-chess-api",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-11-16",
-  "vars": {
-    "ROOM_TOKEN_SECRET": "dev-only-change-me-in-production"
-  },
+  "d1_databases": [
+    {
+      "binding": "BOARDS_DB",
+      "database_name": "chinese-chess-boards",
+      "database_id": "73b519ca-163f-40d3-adce-161f28f36c56"
+    }
+  ],
   "routes": [
     {
-      "pattern": "chess-room.le0.me",
+      "pattern": "api.chess.le0.me",
       "custom_domain": true
     }
   ],

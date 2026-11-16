@@ -3,9 +3,9 @@
  *
  * token = `${分钟桶}.${HMAC-SHA256(密钥, 分钟桶)}`
  * - 用分钟桶而不是精确时间戳：同一分钟内所有人签出的 token 完全一致，
- *   room-worker 可以直接拿 token 当速率限制的 key，天然按分钟分桶，不用 IP。
+ *   api worker 可以直接拿 token 当速率限制的 key，天然按分钟分桶，不用 IP。
  * - 1 小时有效，兼顾页面开着时的重连。
- * - 密钥两侧共享：主站用 env.ROOM_TOKEN_SECRET 签发，room-worker 验签。
+ * - 密钥两侧共享：主站用 env.ROOM_TOKEN_SECRET 签发，api worker 验签。
  */
 
 const TOKEN_TTL_BUCKETS = 60;
@@ -41,6 +41,8 @@ export async function verifyRoomToken(
   token: string | null,
   secret: string
 ): Promise<{ ok: true; bucket: number } | { ok: false }> {
+  // 密钥没配好时宁可拒绝全部连接（403），也不能让 HMAC 抛异常变 500
+  if (!secret) return { ok: false };
   if (!token) return { ok: false };
   const [bucketStr, sig] = token.split('.');
   if (!bucketStr || !sig || !/^\d+$/.test(bucketStr)) return { ok: false };

@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import Palette from 'lucide-svelte/icons/palette';
   import Swords from 'lucide-svelte/icons/swords';
-  import { preloadSounds } from '#lib/chess/sound';
+  import { preloadSounds, unlockAudio } from '#lib/chess/sound';
   import { applyTheme, currentTheme, THEMES, type ThemeId } from '#lib/theme';
   import type { LayoutProps } from './$types';
 
@@ -13,13 +13,13 @@
 
   const tabs = [
     { href: '/ai', label: '人机' },
-    { href: '/room', label: '房间' },
-    { href: '/endgame', label: '残局' },
+    { href: '/play', label: '房间' },
+    { href: '/board', label: '盘面' },
     { href: '/replay', label: '复盘' }
   ];
 
   let loading = $state(true);
-  let theme = $state<ThemeId>('bamboo');
+  let theme = $state<ThemeId>('vermilion');
   let themeOpen = $state(false);
 
   onMount(() => {
@@ -38,6 +38,8 @@
     });
 
     const onPointerDown = (e: PointerEvent) => {
+      // 首次手势同步唤醒音频，之后异步播放（AI 回合、房间广播）才不会被 iOS 拦
+      unlockAudio();
       const target = e.target as HTMLElement;
       if (themeOpen && !target.closest('.theme-menu') && !target.closest('[aria-label="切换配色"]')) {
         themeOpen = false;
@@ -134,6 +136,22 @@
   </nav>
 
   {@render children()}
+
+  <footer class="mt-10 border-t border-border/60 px-4 py-6">
+    <div class="mx-auto flex max-w-5xl justify-center text-xs text-muted-foreground">
+      <a
+        href="https://github.com/mivinci/chess"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+      >
+        <svg viewBox="0 0 16 16" class="size-3.5 fill-current" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+        Written by hy4-flash
+      </a>
+    </div>
+  </footer>
   </div>
 {/if}
 
@@ -155,7 +173,7 @@
   .theme-swatch[data-swatch='indigo'] {
     background: linear-gradient(135deg, #1a1f2e 50%, #8faadc 50%);
   }
-  .theme-swatch[data-swatch='original'] {
+  .theme-swatch[data-swatch='sandalwood'] {
     background: linear-gradient(135deg, #2b2620 50%, #c99a5b 50%);
   }
 

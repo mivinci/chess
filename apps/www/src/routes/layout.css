@@ -35,11 +35,14 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* 默认：竹青墨绿。主色/强调色按主题变，红黑棋子与木棋盘保持不变。 */
-:root,
-:root[data-theme='bamboo'] {
+/* 所有主题共享的基础变量 */
+:root {
   color-scheme: dark;
   --radius: 0.625rem;
+}
+
+/* 默认：朱砂。主色/强调色按主题变，红黑棋子与木棋盘保持不变。 */
+:root[data-theme='bamboo'] {
   --background: oklch(0.185 0.016 165);
   --foreground: oklch(0.95 0.008 150);
   --card: oklch(0.24 0.02 165);
@@ -60,7 +63,8 @@
   --ring: oklch(0.78 0.13 155);
 }
 
-/* 炭黑朱砂：中性灰底 + 朱砂红点缀，最现代 */
+/* 默认 炭黑朱砂：中性灰底 + 朱砂红点缀 */
+:root,
 :root[data-theme='vermilion'] {
   --background: oklch(0.20 0.006 285);
   --foreground: oklch(0.96 0.005 285);
@@ -104,8 +108,8 @@
   --ring: oklch(0.76 0.11 255);
 }
 
-/* 原棕：怀旧，保留最初的全棕配色 */
-:root[data-theme='original'] {
+/* 檀木：深棕暖木配色 */
+:root[data-theme='sandalwood'] {
   --background: oklch(0.17 0.012 60);
   --foreground: oklch(0.95 0.008 70);
   --card: oklch(0.22 0.016 55);

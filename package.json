@@ -8,15 +8,15 @@
   ],
   "scripts": {
     "www:dev": "npm run dev -w @chinese-chess/www",
-    "room:dev": "npm run dev -w @chinese-chess/room",
+    "api:dev": "npm run dev -w @chinese-chess/api",
     "www:build": "npm run build -w @chinese-chess/www",
-    "room:build": "npm run check -w @chinese-chess/room && npm run deploy -w @chinese-chess/room -- --dry-run",
+    "api:build": "npm run check -w @chinese-chess/api && npm run deploy -w @chinese-chess/api -- --dry-run",
     "www:deploy": "npm run deploy -w @chinese-chess/www",
-    "room:deploy": "npm run deploy -w @chinese-chess/room",
+    "api:deploy": "npm run deploy -w @chinese-chess/api",
     "www:check": "npm run check -w @chinese-chess/www",
-    "room:check": "npm run check -w @chinese-chess/room",
-    "check": "npm run www:check && npm run room:check",
-    "build": "npm run www:build && npm run room:build",
-    "deploy": "npm run www:deploy && npm run room:deploy"
+    "api:check": "npm run check -w @chinese-chess/api",
+    "check": "npm run www:check && npm run api:check",
+    "build": "npm run www:build && npm run api:build",
+    "deploy": "npm run www:deploy && npm run api:deploy"
   }
 }

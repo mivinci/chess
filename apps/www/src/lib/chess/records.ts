@@ -11,8 +11,17 @@ export interface GameRecord {
   difficulty: string;
   pace: string;
   result: GameStatus;
+  /** 结束原因：无棋可走（将死/困毙）或超时。旧记录没有 */
+  endReason?: 'checkmate' | 'timeout';
   moves: Move[];
   notations: string[];
+  /** 旧记录没有这个字段，缺省当作人机对战 */
+  source?: 'ai' | 'room';
+  /** 分支来源：从哪一局的第几步派生。旧记录没有 */
+  parentId?: string;
+  step?: number;
+  /** 房间对局的房间号，分支时作为 parentId；人机对局没有 */
+  roomId?: string;
 }
 
 function isMove(value: unknown): value is Move {
@@ -38,7 +47,12 @@ function parseRecord(value: unknown): GameRecord | null {
     !Array.isArray(r.moves) ||
     !r.moves.every(isMove) ||
     !Array.isArray(r.notations) ||
-    !r.notations.every((n) => typeof n === 'string')
+    !r.notations.every((n) => typeof n === 'string') ||
+    (r.source !== undefined && r.source !== 'ai' && r.source !== 'room') ||
+    (r.parentId !== undefined && (typeof r.parentId !== 'string' || !/^[A-Z0-9]{4,12}$/.test(r.parentId))) ||
+    (r.step !== undefined && (!Number.isInteger(r.step) || (r.step as number) < 1)) ||
+    (r.roomId !== undefined && (typeof r.roomId !== 'string' || !/^[A-Z0-9]{4,12}$/.test(r.roomId))) ||
+    (r.endReason !== undefined && r.endReason !== 'checkmate' && r.endReason !== 'timeout')
   ) {
     return null;
   }

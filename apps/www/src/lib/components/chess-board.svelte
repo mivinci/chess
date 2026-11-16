@@ -2,7 +2,7 @@
   import { cubicOut } from 'svelte/easing';
   import type { TransitionConfig } from 'svelte/transition';
   import { pieceLabel } from '#lib/chess/board';
-  import { ELEPHANT, KNIGHT, sideOf, typeOf, xOf, yOf, type Move, type Side } from '#lib/chess/types';
+  import { sideOf, xOf, yOf, type Move, type Side } from '#lib/chess/types';
   import { cn } from '#lib/utils';
 
   interface Props {
@@ -36,6 +36,29 @@
   const MARGIN = 45;
   const SPACING = 90;
 
+  // 走子位移的时长和缓动，落子抬升（见下方 LIFT_FRAMES）必须跟它共用同一组参数，
+  // 否则会出现「已经走到位了，棋子又往下掉一下」。
+  const MOVE_MS = 550;
+  // ease-in-out：起步和收尾都平滑，中段接近匀速。
+  // 之前用 cubic-bezier(0.45,0.05,0.55,1)，前 45% 时间只走 5% 距离，
+  // 短距离走子就成了「先蹦起来、几乎不挪窝、再猛地闪过去」。
+  const MOVE_EASE = 'ease-in-out';
+
+  // 抬升做成梯形：拿起 → 端着平移 → 放下，X 的平移交给外层，这里只管 Y。
+  // offset 定义在「位移进度」空间，和位移共用缓动/时长，于是 offset=1（放下贴地）
+  // 恰好就是位移到位的那一帧，落点和到位不会错开。
+  // 抬升高度按走子格数缩放：短距离（兵、士一步）抬得低，免得相对位移显得像抖。
+  function liftFrames(from: number, to: number): Keyframe[] {
+    const steps = Math.max(Math.abs(xOf(to) - xOf(from)), Math.abs(yOf(to) - yOf(from)));
+    const h = Math.min(24, steps * 9);
+    return [
+      { transform: 'translateY(0)', offset: 0 },
+      { transform: `translateY(-${h}%)`, offset: 0.16 },
+      { transform: `translateY(-${h}%)`, offset: 0.84 },
+      { transform: 'translateY(0)', offset: 1 }
+    ];
+  }
+
   // 棋子层尺寸正好是一格，所以 transform: translate(x%, y%) 移动一格就是 100%
   const squares = Array.from({ length: 90 }, (_, i) => ({
     index: i,
@@ -53,6 +76,12 @@
     [0, 3], [2, 3], [4, 3], [6, 3], [8, 3],
     [0, 6], [2, 6], [4, 6], [6, 6], [8, 6]
   ];
+
+  // 九宫米字格：两端 3×3 区域各画两条对角线
+  const palaceDiagonals = [
+    [3, 0, 5, 2], [5, 0, 3, 2],
+    [3, 7, 5, 9], [5, 7, 3, 9]
+  ] as const;
 
   function markerPath(col: number, row: number): string {
     const cx = MARGIN + col * SPACING;
@@ -86,6 +115,7 @@
       tx: number;
       ty: number;
       capturing: boolean;
+      moving: boolean;
     }[] = [];
     for (let i = 0; i < 90; i++) {
       const id = pieceIds[i];
@@ -95,9 +125,13 @@
         index: i,
         tx: squares[i].tx,
         ty: squares[i].ty,
-        capturing: lastMove !== null && lastMove.captured !== 0 && lastMove.to === i
+        capturing: lastMove !== null && lastMove.captured !== 0 && lastMove.to === i,
+        moving: lastMove !== null && lastMove.to === i
       });
     }
+    // 按身份排序，DOM 顺序与棋盘位置无关。否则走一步会改变数组顺序，keyed each 就要
+    // 重新插入节点，正在跑的 transform 过渡被打断 —— 马、相这种跨过其他棋子的走法会直接瞬移。
+    result.sort((a, b) => a.id - b.id);
     return result;
   });
 
@@ -153,44 +187,30 @@
     return () => clearTimeout(timer);
   });
 
-  // 马走「日」、象走「田」，都是跳跃式，直线补间会像滑行。给它们播一段抛物线模拟跳跃。
-  // CSS transition 也在驱动 transform，但 WAAPI 动画期间优先级更高；播完回落到已更新的 inline 坐标，衔接自然。
-  let jumpedKey = '';
+  // 走子时棋子水平直线移动（CSS transition），同时整体「飞起来」再落下——只动 Y 的独立一层。
+  // 不做曲线路径：实体棋子是拿起来平移过去放下，不是沿弧线滑。
+  let flownKey = '';
   $effect(() => {
     const move = lastMove;
     if (!move || !boardFrame) return;
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
       return;
 
-    // 走子后 to 位上的棋子就是刚落的那个；只处理马和象
-    const pieceType = typeOf(board[move.to]);
-    if (pieceType !== KNIGHT && pieceType !== ELEPHANT) return;
+    // 吃子已有 pounce 动画，不再叠加 lift
+    if (move.captured !== 0) return;
     const id = pieceIds[move.to];
+    if (!id) return;
     const key = `${id}:${move.from}:${move.to}`;
-    if (key === jumpedKey) return; // 同一走子不重复播（悔棋/重渲染时）
-    jumpedKey = key;
+    if (key === flownKey) return; // 同一走子不重复播
+    flownKey = key;
 
-    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"]`);
+    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece-lift`);
     if (!node) return;
-
-    const from = squares[move.from];
-    const to = squares[move.to];
-    const lift = pieceType === ELEPHANT ? 30 : 26; // 抛物线顶点抬升，单位是「一格」的百分比
-    const midX = (from.tx + to.tx) / 2;
-    const midY = (from.ty + to.ty) / 2 - lift;
-
-    node.animate(
-      [
-        { transform: `translate(${from.tx}%, ${from.ty}%)`, offset: 0 },
-        { transform: `translate(${midX}%, ${midY}%)`, offset: 0.5 },
-        { transform: `translate(${to.tx}%, ${to.ty}%)`, offset: 1 }
-      ],
-      {
-        duration: 550,
-        easing: 'cubic-bezier(0.35, 0.05, 0.5, 1)',
-        composite: 'replace'
-      }
-    );
+    node.animate(liftFrames(move.from, move.to), {
+      duration: MOVE_MS,
+      easing: MOVE_EASE,
+      composite: 'replace'
+    });
   });
 
   // 视角固定为玩家执子方：执黑时旋转棋盘，使己方始终在下方
@@ -198,7 +218,12 @@
 </script>
 
 <div class="board-frame" bind:this={boardFrame}>
-  <div class="board-surface" class:flipped>
+  <div
+    class="board-surface"
+    class:flipped
+    style:--move-ms="{MOVE_MS}ms"
+    style:--move-ease={MOVE_EASE}
+  >
     <svg class="lines" viewBox="0 0 {BOARD_W} {BOARD_H}" aria-hidden="true">
       <g stroke="#5a3a1c" stroke-width="1.8" fill="none" stroke-linecap="square">
         {#each rows as y}
@@ -219,6 +244,14 @@
           height={9 * SPACING}
           stroke-width="3"
         />
+        {#each palaceDiagonals as [c1, r1, c2, r2]}
+          <line
+            x1={MARGIN + c1 * SPACING}
+            y1={MARGIN + r1 * SPACING}
+            x2={MARGIN + c2 * SPACING}
+            y2={MARGIN + r2 * SPACING}
+          />
+        {/each}
         {#each markerPoints as [c, r]}
           <path d={markerPath(c, r)} stroke-width="1.5" />
         {/each}
@@ -318,6 +351,7 @@
       <div
         class="piece-position"
         class:capturing={item.capturing}
+        class:moving={item.moving}
         data-piece-id={item.id}
         style:transform="translate({item.tx}%, {item.ty}%)"
         out:captureOut
@@ -325,13 +359,15 @@
         {#if item.capturing}
           <span class="flight-shadow"></span>
         {/if}
-        <span
-          class={cn('piece', sideOf(board[item.index]) === 1 ? 'red' : 'black')}
-          class:selected={selected === item.index}
-          class:checked={checkKing === item.index}
-          class:hovered={hoveredIndex === item.index && !disabled}
-        >
-          {labelFor(item.index)}
+        <span class="piece-lift">
+          <span
+            class={cn('piece', sideOf(board[item.index]) === 1 ? 'red' : 'black')}
+            class:selected={selected === item.index}
+            class:checked={checkKing === item.index}
+            class:hovered={hoveredIndex === item.index && !disabled}
+          >
+            {labelFor(item.index)}
+          </span>
         </span>
       </div>
     {/each}
@@ -417,8 +453,19 @@
     pointer-events: none;
     z-index: 3;
     /* transform 走合成层，不触发布局重排；同一个节点坐标改变时补出位移 */
-    transition: transform 0.55s cubic-bezier(0.45, 0.05, 0.55, 1);
+    transition:
+      transform var(--move-ms, 550ms) var(--move-ease, cubic-bezier(0.45, 0.05, 0.55, 1));
     will-change: transform;
+  }
+
+  /* 独立一层：走子时只动 Y 做「飞起来」效果，水平位移交给外层 piece-position */
+  .piece-lift {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
   }
 
   .piece {
@@ -465,6 +512,11 @@
 
   .black {
     color: #2a231c;
+  }
+
+  /* 落子瞬间让选中放大立即归位，避免 140ms 回弹叠在位移上看着像偏一下 */
+  .piece-position.moving .piece {
+    transition: none;
   }
 
   /* 吃子方：只动 transform / opacity，走合成层，避免逐帧重绘阴影 */
