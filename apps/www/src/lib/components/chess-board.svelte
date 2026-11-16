@@ -36,6 +36,23 @@
   const MARGIN = 45;
   const SPACING = 90;
 
+  // 走子位移的时长和缓动，落子抬升（见下方 LIFT_FRAMES）必须跟它共用同一组参数，
+  // 否则会出现「已经走到位了，棋子又往下掉一下」。
+  const MOVE_MS = 550;
+  const MOVE_EASE = 'cubic-bezier(0.45, 0.05, 0.55, 1)';
+  const LIFT_PERCENT = 26;
+
+  // 抬升高度按「位移进度」描一条抛物线：进度 0 和 1 都贴地，中段最高。
+  // 关键帧 offset 是线性的，再交给和位移同一条缓动曲线去映射时间，
+  // 于是落地的那一帧恰好就是到位的帧。
+  const LIFT_FRAMES = Array.from({ length: 21 }, (_, i) => {
+    const p = i / 20;
+    return {
+      transform: `translateY(${(-LIFT_PERCENT * 4 * p * (1 - p)).toFixed(2)}%)`,
+      offset: p
+    };
+  });
+
   // 棋子层尺寸正好是一格，所以 transform: translate(x%, y%) 移动一格就是 100%
   const squares = Array.from({ length: 90 }, (_, i) => ({
     index: i,
@@ -106,6 +123,9 @@
         moving: lastMove !== null && lastMove.to === i
       });
     }
+    // 按身份排序，DOM 顺序与棋盘位置无关。否则走一步会改变数组顺序，keyed each 就要
+    // 重新插入节点，正在跑的 transform 过渡被打断 —— 马、相这种跨过其他棋子的走法会直接瞬移。
+    result.sort((a, b) => a.id - b.id);
     return result;
   });
 
@@ -180,15 +200,11 @@
 
     const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece-lift`);
     if (!node) return;
-    node.animate(
-      [
-        { transform: 'translateY(0)', offset: 0 },
-        { transform: 'translateY(-26%)', offset: 0.45 },
-        { transform: 'translateY(-26%)', offset: 0.62 },
-        { transform: 'translateY(0)', offset: 1 }
-      ],
-      { duration: 550, easing: 'ease-in-out', composite: 'replace' }
-    );
+    node.animate(LIFT_FRAMES, {
+      duration: MOVE_MS,
+      easing: MOVE_EASE,
+      composite: 'replace'
+    });
   });
 
   // 视角固定为玩家执子方：执黑时旋转棋盘，使己方始终在下方
@@ -196,7 +212,12 @@
 </script>
 
 <div class="board-frame" bind:this={boardFrame}>
-  <div class="board-surface" class:flipped>
+  <div
+    class="board-surface"
+    class:flipped
+    style:--move-ms="{MOVE_MS}ms"
+    style:--move-ease={MOVE_EASE}
+  >
     <svg class="lines" viewBox="0 0 {BOARD_W} {BOARD_H}" aria-hidden="true">
       <g stroke="#5a3a1c" stroke-width="1.8" fill="none" stroke-linecap="square">
         {#each rows as y}
@@ -426,7 +447,8 @@
     pointer-events: none;
     z-index: 3;
     /* transform 走合成层，不触发布局重排；同一个节点坐标改变时补出位移 */
-    transition: transform 0.55s cubic-bezier(0.45, 0.05, 0.55, 1);
+    transition:
+      transform var(--move-ms, 550ms) var(--move-ease, cubic-bezier(0.45, 0.05, 0.55, 1));
     will-change: transform;
   }
 
