@@ -39,19 +39,25 @@
   // 走子位移的时长和缓动，落子抬升（见下方 LIFT_FRAMES）必须跟它共用同一组参数，
   // 否则会出现「已经走到位了，棋子又往下掉一下」。
   const MOVE_MS = 550;
-  const MOVE_EASE = 'cubic-bezier(0.45, 0.05, 0.55, 1)';
-  const LIFT_PERCENT = 26;
+  // ease-in-out：起步和收尾都平滑，中段接近匀速。
+  // 之前用 cubic-bezier(0.45,0.05,0.55,1)，前 45% 时间只走 5% 距离，
+  // 短距离走子就成了「先蹦起来、几乎不挪窝、再猛地闪过去」。
+  const MOVE_EASE = 'ease-in-out';
 
-  // 抬升高度按「位移进度」描一条抛物线：进度 0 和 1 都贴地，中段最高。
-  // 关键帧 offset 是线性的，再交给和位移同一条缓动曲线去映射时间，
-  // 于是落地的那一帧恰好就是到位的帧。
-  const LIFT_FRAMES = Array.from({ length: 21 }, (_, i) => {
-    const p = i / 20;
-    return {
-      transform: `translateY(${(-LIFT_PERCENT * 4 * p * (1 - p)).toFixed(2)}%)`,
-      offset: p
-    };
-  });
+  // 抬升做成梯形：拿起 → 端着平移 → 放下，X 的平移交给外层，这里只管 Y。
+  // offset 定义在「位移进度」空间，和位移共用缓动/时长，于是 offset=1（放下贴地）
+  // 恰好就是位移到位的那一帧，落点和到位不会错开。
+  // 抬升高度按走子格数缩放：短距离（兵、士一步）抬得低，免得相对位移显得像抖。
+  function liftFrames(from: number, to: number): Keyframe[] {
+    const steps = Math.max(Math.abs(xOf(to) - xOf(from)), Math.abs(yOf(to) - yOf(from)));
+    const h = Math.min(24, steps * 9);
+    return [
+      { transform: 'translateY(0)', offset: 0 },
+      { transform: `translateY(-${h}%)`, offset: 0.16 },
+      { transform: `translateY(-${h}%)`, offset: 0.84 },
+      { transform: 'translateY(0)', offset: 1 }
+    ];
+  }
 
   // 棋子层尺寸正好是一格，所以 transform: translate(x%, y%) 移动一格就是 100%
   const squares = Array.from({ length: 90 }, (_, i) => ({
@@ -200,7 +206,7 @@
 
     const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece-lift`);
     if (!node) return;
-    node.animate(LIFT_FRAMES, {
+    node.animate(liftFrames(move.from, move.to), {
       duration: MOVE_MS,
       easing: MOVE_EASE,
       composite: 'replace'
