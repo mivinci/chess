@@ -2,7 +2,7 @@
   import { cubicOut } from 'svelte/easing';
   import type { TransitionConfig } from 'svelte/transition';
   import { pieceLabel } from '#lib/chess/board';
-  import { ELEPHANT, KNIGHT, sideOf, typeOf, xOf, yOf, type Move, type Side } from '#lib/chess/types';
+  import { sideOf, xOf, yOf, type Move, type Side } from '#lib/chess/types';
   import { cn } from '#lib/utils';
 
   interface Props {
@@ -161,47 +161,34 @@
     return () => clearTimeout(timer);
   });
 
-  // 马走「日」、象走「田」，都是跳跃式，直线补间会像滑行。给它们播一段抛物线模拟跳跃。
-  // CSS transition 也在驱动 transform，但 WAAPI 动画期间优先级更高；播完回落到已更新的 inline 坐标，衔接自然。
-  let jumpedKey = '';
+  // 走子时棋子水平直线移动（CSS transition），同时整体「飞起来」再落下——只动 Y 的独立一层。
+  // 不做曲线路径：实体棋子是拿起来平移过去放下，不是沿弧线滑。
+  let flownKey = '';
   $effect(() => {
     const move = lastMove;
     if (!move || !boardFrame) return;
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
       return;
 
-    // 走子后 to 位上的棋子就是刚落的那个；只处理马和象
-    const pieceType = typeOf(board[move.to]);
-    if (pieceType !== KNIGHT && pieceType !== ELEPHANT) return;
+    // 吃子已有 pounce 动画，不再叠加 lift
+    if (move.captured !== 0) return;
     const id = pieceIds[move.to];
+    if (!id) return;
     const key = `${id}:${move.from}:${move.to}`;
-    if (key === jumpedKey) return; // 同一走子不重复播（悔棋/重渲染时）
-    jumpedKey = key;
+    if (key === flownKey) return; // 同一走子不重复播
+    flownKey = key;
 
-    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"]`);
+    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece-lift`);
     if (!node) return;
-
-    const from = squares[move.from];
-    const to = squares[move.to];
-    // 二次贝塞尔：控制点在起终点中点上方，曲线不过控制点，所以偏移取 lift 两倍
-    const lift = pieceType === ELEPHANT ? 50 : 40;
-    const cx = (from.tx + to.tx) / 2;
-    const cy = (from.ty + to.ty) / 2 - lift;
-
-    // 多帧采样成平滑弧线；三段关键帧会在中点硬拐方向，看着歪歪扭扭
-    const frames = Array.from({ length: 13 }, (_, i) => {
-      const t = i / 12;
-      const u = 1 - t;
-      const x = u * u * from.tx + 2 * u * t * cx + t * t * to.tx;
-      const y = u * u * from.ty + 2 * u * t * cy + t * t * to.ty;
-      return { transform: `translate(${x}%, ${y}%)`, offset: t };
-    });
-
-    node.animate(frames, {
-      duration: 550,
-      easing: 'cubic-bezier(0.35, 0.05, 0.5, 1)',
-      composite: 'replace'
-    });
+    node.animate(
+      [
+        { transform: 'translateY(0)', offset: 0 },
+        { transform: 'translateY(-26%)', offset: 0.45 },
+        { transform: 'translateY(-26%)', offset: 0.62 },
+        { transform: 'translateY(0)', offset: 1 }
+      ],
+      { duration: 550, easing: 'ease-in-out', composite: 'replace' }
+    );
   });
 
   // 视角固定为玩家执子方：执黑时旋转棋盘，使己方始终在下方
@@ -345,13 +332,15 @@
         {#if item.capturing}
           <span class="flight-shadow"></span>
         {/if}
-        <span
-          class={cn('piece', sideOf(board[item.index]) === 1 ? 'red' : 'black')}
-          class:selected={selected === item.index}
-          class:checked={checkKing === item.index}
-          class:hovered={hoveredIndex === item.index && !disabled}
-        >
-          {labelFor(item.index)}
+        <span class="piece-lift">
+          <span
+            class={cn('piece', sideOf(board[item.index]) === 1 ? 'red' : 'black')}
+            class:selected={selected === item.index}
+            class:checked={checkKing === item.index}
+            class:hovered={hoveredIndex === item.index && !disabled}
+          >
+            {labelFor(item.index)}
+          </span>
         </span>
       </div>
     {/each}
@@ -439,6 +428,16 @@
     /* transform 走合成层，不触发布局重排；同一个节点坐标改变时补出位移 */
     transition: transform 0.55s cubic-bezier(0.45, 0.05, 0.55, 1);
     will-change: transform;
+  }
+
+  /* 独立一层：走子时只动 Y 做「飞起来」效果，水平位移交给外层 piece-position */
+  .piece-lift {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
   }
 
   .piece {
