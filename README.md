@@ -19,6 +19,13 @@
 - 四套配色可切换：朱砂、竹青、月白、檀木
 - 棋子音效与走子动画，手机端适配
 
+## 实现
+
+- `www` 是 SvelteKit 主站，`api` 是 Hono Worker；房间与匹配跑在 Durable Objects 上，盘面榜存 D1
+- AI 在浏览器 Web Worker 里运算；房间邀请 AI 时由房主页面兼职，服务端只转发消息
+- 每局棋是树上的一个节点，记下父局 id 与分支步数；从复盘任意步能派生新局，引用次数汇成热门盘面
+- 终局 30 天后清理棋谱存储，保留胜负与分支信息；旧局被分支时从 D1 取回完整历史
+
 ## 本地运行
 
 需要 Node.js。把 `apps/www/.dev.vars.example` 和 `apps/api/.dev.vars.example` 各复制为 `.dev.vars`（两边密钥相同）。
