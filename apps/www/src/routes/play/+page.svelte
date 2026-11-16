@@ -28,7 +28,7 @@
 
   function createRoom() {
     const id = generateRoomId();
-    goto(`/room/${id}`);
+    goto(`/play/${id}`);
   }
 
   function joinRoom() {
@@ -37,7 +37,7 @@
       error = '房间号 4–12 位，只含字母和数字';
       return;
     }
-    goto(`/room/${id}`);
+    goto(`/play/${id}`);
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -102,7 +102,7 @@
       } else if (type === 'matched') {
         matchState = 'matched';
         closeMatch();
-        goto(`/room/${normalizeRoomId(msg.roomId as string)}`);
+        goto(`/play/${normalizeRoomId(msg.roomId as string)}`);
       } else if (type === 'cancelled') {
         cancelMatch();
       } else if (type === 'timeout') {

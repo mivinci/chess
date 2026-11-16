@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import Bot from 'lucide-svelte/icons/bot';
+  import History from 'lucide-svelte/icons/history';
   import Lightbulb from 'lucide-svelte/icons/lightbulb';
   import LoaderCircle from 'lucide-svelte/icons/loader-circle';
   import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
@@ -16,7 +19,9 @@
   import Select from '#lib/components/ui/select.svelte';
   import { ChessGame, type GameStatus } from '#lib/chess/game';
   import { saveRecord } from '#lib/chess/records';
+  import { explainHint } from '#lib/chess/hint-explain';
   import { playCaptureSound, playMoveSound } from '#lib/chess/sound';
+  import { generateRoomId, ROOM_HTTP_BASE } from '#lib/room/config';
   import { BLACK, RED, sideOf, type Move, type Side } from '#lib/chess/types';
   import type { SearchRequest, SearchResponse } from '#lib/chess/ai.worker';
 
@@ -40,19 +45,21 @@
   let thinking = $state(false);
   let hinting = $state(false);
   let hintMove = $state<Move | null>(null);
+  let hintScore = $state(0);
+  let hintText = $derived(
+    hintMove ? explainHint(game.board, hintMove, playerSide, hintScore) : ''
+  );
   let soundOn = $state(true);
   let aiPace = $state<'natural' | 'fast'>('natural');
 
-  // 音效跟动画对齐：吃子在砸下瞬间响，普通落子在棋子落定时响
+  // 音效跟动画对齐：吃子在砸下瞬间响，普通落子在棋子落定时响。
+  // 用 AudioBuffer 精确调度，不再 setTimeout + play()，消除手机上 audio.play() 的启动抖动
   function playMove(move: Move | null) {
     if (!soundOn || !move) return;
     const isCapture = move.captured !== 0;
     const delay = isCapture ? 430 : 540;
-    setTimeout(() => {
-      if (!soundOn) return;
-      if (isCapture) playCaptureSound();
-      else playMoveSound();
-    }, delay);
+    if (isCapture) playCaptureSound(delay);
+    else playMoveSound(delay);
   }
   let worker: Worker | null = null;
   let requestId = 0;
@@ -72,6 +79,10 @@
     }
     return rows;
   });
+
+  let endText = $derived(
+    gameStatus === 'red-win' || gameStatus === 'black-win' ? '无棋可走（将死 / 困毙）' : ''
+  );
 
   let statusText = $derived.by(() => {
     if (gameStatus === 'red-win' || gameStatus === 'black-win') {
@@ -95,16 +106,29 @@
   function recordCurrentGame() {
     if (recorded || game.history.length === 0) return;
     recorded = true;
+    const roomId = generateRoomId();
+    const moves = game.history.map((m) => ({ ...m }));
+    const notations = [...game.notations];
     saveRecord({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       playedAt: Date.now(),
       playerSide,
       difficulty,
       pace: aiPace,
+      source: 'ai',
+      roomId,
       result: game.status,
-      moves: game.history.map((m) => ({ ...m })),
-      notations: [...game.notations]
+      endReason: 'checkmate',
+      moves,
+      notations
     });
+    // 上传到服务端供日后分支；失败不影响本地记录，这盘仍能看能复盘，只是不能从服务端派生
+    const token = (page.data.roomToken as string | undefined) ?? '';
+    void fetch(`${ROOM_HTTP_BASE}/archive?token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: roomId, history: moves, notations })
+    }).catch(() => {});
   }
 
   function postSearch(purpose: 'move' | 'hint', side: Side) {
@@ -127,6 +151,7 @@
   function requestHint() {
     if (!worker || !humanTurn || gameStatus !== 'playing') return;
     hintMove = null;
+    hintScore = 0;
     hinting = true;
     postSearch('hint', playerSide);
   }
@@ -146,6 +171,7 @@
         humanMovedAt = performance.now();
         sync();
         if (gameStatus === 'playing') askAI();
+        else recordCurrentGame(); // 玩家走子直接将死/困毙对手时也要存档
       }
       return;
     }
@@ -204,6 +230,7 @@
 
       if (response.purpose === 'hint') {
         hintMove = response.move;
+        hintScore = response.score;
         hinting = false;
         return;
       }
@@ -275,6 +302,38 @@
           </Badge>
           <span class="text-xs text-muted-foreground">第 {moveCount + 1} 回合</span>
         </div>
+        {#if gameStatus !== 'playing'}
+          <Card class="mx-auto mt-3 max-w-[600px] p-3.5 text-center">
+            <div class="flex items-center justify-center gap-2">
+              <Trophy class="size-5 text-primary" />
+              <h2 class="text-lg font-semibold">
+                {gameStatus === 'red-win'
+                  ? playerSide === RED
+                    ? '你赢了'
+                    : '电脑获胜'
+                  : playerSide === BLACK
+                    ? '你赢了'
+                    : '电脑获胜'}
+              </h2>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">共 {moveCount} 回合 · {endText}</p>
+            <div class="mt-3 flex gap-2">
+              <Button class="flex-1" onclick={newGame}>
+                <RotateCcw class="size-4" />再来一局
+              </Button>
+              <Button
+                variant="outline"
+                class="flex-1"
+                onclick={() => {
+                  recordCurrentGame();
+                  void goto('/replay');
+                }}
+              >
+                <History class="size-3.5" />去复盘
+              </Button>
+            </div>
+          </Card>
+        {/if}
       </section>
 
       <aside class="space-y-3">
@@ -344,6 +403,14 @@
                 {/if}
               </Button>
             </div>
+            {#if hintText}
+              <div class="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs leading-relaxed text-foreground/90">
+                <div class="mb-0.5 flex items-center gap-1 font-medium text-primary">
+                  <Lightbulb class="size-3" />建议走法
+                </div>
+                {hintText}
+              </div>
+            {/if}
             {#if hintMove}
               <p class="text-xs text-muted-foreground">棋盘上高亮了建议的起点和落点，自己点它走棋。</p>
             {/if}
@@ -397,25 +464,4 @@
       </aside>
     </div>
   </div>
-
-  {#if gameStatus !== 'playing'}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm">
-      <Card class="w-[min(90vw,340px)] p-6 text-center">
-        <Trophy class="mx-auto size-10 text-primary" />
-        <h2 class="mt-3 text-xl font-semibold">
-          {gameStatus === 'red-win'
-            ? playerSide === RED
-              ? '你赢了'
-              : '电脑获胜'
-            : playerSide === BLACK
-              ? '你赢了'
-              : '电脑获胜'}
-        </h2>
-        <p class="mt-1 text-sm text-muted-foreground">共 {moveCount} 回合</p>
-        <Button class="mt-5 w-full" onclick={newGame}>
-          <RotateCcw class="size-4" />再来一局
-        </Button>
-      </Card>
-    </div>
-  {/if}
 </main>

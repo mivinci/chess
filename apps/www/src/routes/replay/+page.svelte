@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto as navigate } from '$app/navigation';
+  import { page } from '$app/state';
   import ArrowLeft from 'lucide-svelte/icons/arrow-left';
   import ChevronLeft from 'lucide-svelte/icons/chevron-left';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import ChevronsLeft from 'lucide-svelte/icons/chevrons-left';
   import ChevronsRight from 'lucide-svelte/icons/chevrons-right';
+  import GitBranch from 'lucide-svelte/icons/git-branch';
   import Pause from 'lucide-svelte/icons/pause';
   import Play from 'lucide-svelte/icons/play';
   import Trash2 from 'lucide-svelte/icons/trash-2';
@@ -14,6 +17,7 @@
   import Card from '#lib/components/ui/card.svelte';
   import { ChessGame } from '#lib/chess/game';
   import { clearRecords, deleteRecord, loadRecords, type GameRecord } from '#lib/chess/records';
+  import { generateRoomId, ROOM_HTTP_BASE } from '#lib/room/config';
   import { RED, type Move, type Side } from '#lib/chess/types';
 
   const STEP_INTERVAL = 900;
@@ -44,11 +48,21 @@
     };
   });
 
+  let reasonText = $derived(
+    selected?.endReason === 'timeout'
+      ? '超时判负'
+      : selected?.endReason === 'checkmate'
+        ? '无棋可走'
+        : '—'
+  );
+
   let resultText = $derived.by(() => {
     if (!selected) return '';
     if (selected.result === 'playing') return '未结束';
     const winner = selected.result === 'red-win' ? RED : -1;
-    return winner === selected.playerSide ? '你赢了' : '电脑获胜';
+    const won = winner === selected.playerSide;
+    if (won) return '你赢了';
+    return selected.source === 'room' ? '对手获胜' : '电脑获胜';
   });
 
   function formatTime(ts: number) {
@@ -65,6 +79,13 @@
 
   function goto(next: number) {
     step = Math.max(0, Math.min(totalSteps, next));
+  }
+
+  /** 从当前步派生新棋局：新房间号 + 父房间号 + 分叉步数，走子历史由服务端 DO 从父局读取 */
+  function forkFromHere() {
+    if (!selected?.roomId || step < 1) return;
+    const newId = generateRoomId();
+    void navigate(`/play/${newId}?from=${selected.roomId}&step=${step}`);
   }
 
   function stopPlaying() {
@@ -111,6 +132,46 @@
 
   onMount(() => {
     records = loadRecords();
+
+    // 从盘面页跳进来：?board=<父局>&step=<N>，从服务端取该局棋谱并定位到该步
+    const boardId = (page.url.searchParams.get('board') ?? '').toUpperCase();
+    const targetStep = Number(page.url.searchParams.get('step'));
+    if (/^[A-Z0-9]{4,12}$/.test(boardId) && Number.isInteger(targetStep) && targetStep >= 1) {
+      const token = (page.data.roomToken as string | undefined) ?? '';
+      fetch(
+        `${ROOM_HTTP_BASE}/boards?parent=${boardId}&step=${targetStep}&token=${encodeURIComponent(token)}`
+      )
+        .then((r) =>
+          r.ok
+            ? (r.json() as Promise<{ boards?: { history: string; notations: string }[] }>)
+            : Promise.reject(new Error(String(r.status)))
+        )
+        .then((data: { boards?: { history: string; notations: string }[] }) => {
+          const row = data.boards?.[0];
+          if (!row) return;
+          const moves = JSON.parse(row.history) as Move[];
+          const notations = JSON.parse(row.notations) as string[];
+          const record: GameRecord = {
+            id: `board-${boardId}-${targetStep}`,
+            playedAt: Date.now(),
+            playerSide: RED,
+            difficulty: `盘面 ${boardId}`,
+            pace: '—',
+            source: 'room',
+            roomId: boardId,
+            result: 'playing',
+            moves,
+            notations
+          };
+          records = [record, ...records];
+          selectedId = record.id;
+          step = Math.min(targetStep, moves.length);
+        })
+        .catch(() => {
+          // 加载失败就留在本地复盘列表，不阻断页面
+        });
+    }
+
     return () => stopPlaying();
   });
 </script>
@@ -169,6 +230,11 @@
                 <div class="mt-1 text-xs text-muted-foreground">
                   执{record.playerSide === RED ? '红' : '黑'} · {record.moves.length} 步 · {record.difficulty}
                 </div>
+                {#if record.parentId && record.step}
+                  <div class="mt-0.5 text-[11px] text-muted-foreground">
+                    分支自 {record.parentId} 第 {record.step} 步
+                  </div>
+                {/if}
               </button>
             {/each}
           </div>
@@ -212,6 +278,17 @@
               <span class="ml-2 text-sm tabular-nums text-muted-foreground">
                 {step} / {totalSteps}
               </span>
+              {#if selected?.roomId}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="ml-auto"
+                  disabled={step < 1}
+                  onclick={forkFromHere}
+                >
+                  <GitBranch class="size-3.5" />从这里开新局
+                </Button>
+              {/if}
             </div>
 
             <div class="mx-auto mt-4 grid max-w-[600px] gap-4 sm:grid-cols-2">
@@ -226,10 +303,22 @@
                     <span class="text-muted-foreground">结果</span>
                     <span>{resultText}</span>
                   </div>
+                  {#if selected?.result !== 'playing'}
+                    <div class="flex justify-between">
+                      <span class="text-muted-foreground">结束原因</span>
+                      <span class="text-xs">{reasonText}</span>
+                    </div>
+                  {/if}
                   <div class="flex justify-between">
                     <span class="text-muted-foreground">难度 / 节奏</span>
                     <span class="text-xs">{selected.difficulty} / {selected.pace}</span>
                   </div>
+                  {#if selected.parentId && selected.step}
+                    <div class="flex justify-between">
+                      <span class="text-muted-foreground">来源</span>
+                      <span class="text-xs">分支自 {selected.parentId} 第 {selected.step} 步</span>
+                    </div>
+                  {/if}
                 </div>
                 <Button variant="ghost" size="sm" class="mt-3 w-full" onclick={removeCurrent}>
                   <Trash2 class="size-4" />删除这局

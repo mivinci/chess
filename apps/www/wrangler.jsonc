@@ -6,9 +6,6 @@
     "nodejs_als"
   ],
   "main": ".svelte-kit/cloudflare/_worker.js",
-  "vars": {
-    "ROOM_TOKEN_SECRET": "dev-only-change-me-in-production"
-  },
   "assets": {
     "binding": "ASSETS",
     "directory": ".svelte-kit/cloudflare"

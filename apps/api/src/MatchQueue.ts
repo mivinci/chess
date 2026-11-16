@@ -1,10 +1,15 @@
 import { DurableObject } from 'cloudflare:workers';
+import { z } from 'zod';
 
 /** 排队超时：60 秒没配上就提示 */
 const WAIT_MS = 60_000;
 const ROOM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-type ClientMessage = { type: 'queue' } | { type: 'cancel' };
+const ClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('queue') }),
+  z.object({ type: z.literal('cancel') })
+]);
+type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
 interface Waiter {
   ws: WebSocket;
@@ -55,12 +60,19 @@ export class MatchQueue extends DurableObject {
     waiters.forEach((w, i) => this.send(w.ws, { type: 'queued', position: i + 1, waiting: waiters.length }));
   }
 
-  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    if (typeof raw !== 'string') return;
-    let msg: ClientMessage;
+  private parseMessage(raw: string | ArrayBuffer): ClientMessage | null {
+    if (typeof raw !== 'string') return null;
     try {
-      msg = JSON.parse(raw) as ClientMessage;
+      const parsed = ClientMessageSchema.safeParse(JSON.parse(raw));
+      return parsed.success ? parsed.data : null;
     } catch {
+      return null;
+    }
+  }
+
+  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    const msg = this.parseMessage(raw);
+    if (!msg) {
       this.send(ws, { type: 'error', message: '消息格式错误' });
       return;
     }

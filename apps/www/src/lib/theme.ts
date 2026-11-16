@@ -1,10 +1,10 @@
 /** 主题切换：持久化到 localStorage，同步到 <html data-theme> */
 
 export const THEMES = [
-  { id: 'bamboo', label: '竹青', desc: '墨绿 · 竹青' },
   { id: 'vermilion', label: '朱砂', desc: '炭黑 · 朱砂' },
+  { id: 'bamboo', label: '竹青', desc: '墨绿 · 竹青' },
   { id: 'indigo', label: '月白', desc: '靛蓝 · 月白' },
-  { id: 'original', label: '原棕', desc: '怀旧配色' }
+  { id: 'sandalwood', label: '檀木', desc: '深棕 · 暖木' }
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -16,9 +16,9 @@ export function isThemeId(value: string | null): value is ThemeId {
 }
 
 export function currentTheme(): ThemeId {
-  if (typeof document === 'undefined') return 'bamboo';
+  if (typeof document === 'undefined') return 'vermilion';
   const stored = localStorage.getItem(KEY);
-  return isThemeId(stored) ? stored : 'bamboo';
+  return isThemeId(stored) ? stored : 'vermilion';
 }
 
 export function applyTheme(id: ThemeId): void {

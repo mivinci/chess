@@ -54,6 +54,12 @@
     [0, 6], [2, 6], [4, 6], [6, 6], [8, 6]
   ];
 
+  // 九宫米字格：两端 3×3 区域各画两条对角线
+  const palaceDiagonals = [
+    [3, 0, 5, 2], [5, 0, 3, 2],
+    [3, 7, 5, 9], [5, 7, 3, 9]
+  ] as const;
+
   function markerPath(col: number, row: number): string {
     const cx = MARGIN + col * SPACING;
     const cy = MARGIN + row * SPACING;
@@ -219,6 +225,14 @@
           height={9 * SPACING}
           stroke-width="3"
         />
+        {#each palaceDiagonals as [c1, r1, c2, r2]}
+          <line
+            x1={MARGIN + c1 * SPACING}
+            y1={MARGIN + r1 * SPACING}
+            x2={MARGIN + c2 * SPACING}
+            y2={MARGIN + r2 * SPACING}
+          />
+        {/each}
         {#each markerPoints as [c, r]}
           <path d={markerPath(c, r)} stroke-width="1.5" />
         {/each}

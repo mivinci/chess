@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import Palette from 'lucide-svelte/icons/palette';
   import Swords from 'lucide-svelte/icons/swords';
-  import { preloadSounds } from '#lib/chess/sound';
+  import { preloadSounds, unlockAudio } from '#lib/chess/sound';
   import { applyTheme, currentTheme, THEMES, type ThemeId } from '#lib/theme';
   import type { LayoutProps } from './$types';
 
@@ -13,13 +13,13 @@
 
   const tabs = [
     { href: '/ai', label: '人机' },
-    { href: '/room', label: '房间' },
-    { href: '/endgame', label: '残局' },
+    { href: '/play', label: '房间' },
+    { href: '/board', label: '盘面' },
     { href: '/replay', label: '复盘' }
   ];
 
   let loading = $state(true);
-  let theme = $state<ThemeId>('bamboo');
+  let theme = $state<ThemeId>('vermilion');
   let themeOpen = $state(false);
 
   onMount(() => {
@@ -38,6 +38,8 @@
     });
 
     const onPointerDown = (e: PointerEvent) => {
+      // 首次手势同步唤醒音频，之后异步播放（AI 回合、房间广播）才不会被 iOS 拦
+      unlockAudio();
       const target = e.target as HTMLElement;
       if (themeOpen && !target.closest('.theme-menu') && !target.closest('[aria-label="切换配色"]')) {
         themeOpen = false;
@@ -155,7 +157,7 @@
   .theme-swatch[data-swatch='indigo'] {
     background: linear-gradient(135deg, #1a1f2e 50%, #8faadc 50%);
   }
-  .theme-swatch[data-swatch='original'] {
+  .theme-swatch[data-swatch='sandalwood'] {
     background: linear-gradient(135deg, #2b2620 50%, #c99a5b 50%);
   }
 

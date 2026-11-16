@@ -1,5 +1,5 @@
 {
-  "name": "@chinese-chess/room",
+  "name": "@chinese-chess/api",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -8,5 +8,9 @@
     "deploy": "wrangler deploy",
     "check": "wrangler types && tsc --noEmit -p tsconfig.json",
     "gen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.10.0",
+    "zod": "^4.1.0"
   }
 }

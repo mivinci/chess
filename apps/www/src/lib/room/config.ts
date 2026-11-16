@@ -1,15 +1,26 @@
-/** 房间服务地址。本地开发跑 room-worker (wrangler dev，默认 8787)，线上填部署后的域名 */
+/** 房间服务地址。本地开发跑 api worker (wrangler dev，默认 8787)，线上填部署后的域名 */
 export const ROOM_WS_BASE =
   (import.meta.env.VITE_ROOM_WS_BASE as string | undefined) ?? 'ws://localhost:8787';
 
-/** 把访问凭证附在 WS URL 上，room-worker 在握手阶段验签 */
+/** 同一服务的 HTTP 地址（存档接口用），从 WS 地址推导 */
+export const ROOM_HTTP_BASE = ROOM_WS_BASE.replace(/^ws/, 'http').replace(/\/$/, '');
+
+/** 把访问凭证附在 WS URL 上，api worker 在握手阶段验签 */
 function withToken(path: string, token: string): string {
   const url = `${ROOM_WS_BASE.replace(/\/$/, '')}${path}`;
   return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 }
 
-export function roomSocketUrl(roomId: string, token: string): string {
-  return withToken(`/ws/${roomId}`, token);
+export function roomSocketUrl(
+  roomId: string,
+  token: string,
+  fork?: { from: string; step: number }
+): string {
+  let url = withToken(`/ws/${roomId}`, token);
+  if (fork && /^[A-Z0-9]{4,12}$/.test(fork.from) && fork.step >= 1) {
+    url += `&from=${fork.from}&step=${fork.step}`;
+  }
+  return url;
 }
 
 export function matchSocketUrl(token: string): string {

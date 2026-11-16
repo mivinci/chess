@@ -153,3 +153,6 @@ vite.config.ts.timestamp-*
 
 # Generated Cloudflare types
 worker-configuration.d.ts
+
+# Local dev secrets
+.dev.vars
