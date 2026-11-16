@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "noEmit": true,
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": [
+    "src",
+    "worker-configuration.d.ts",
+    "../www/src/lib/chess/types.ts",
+    "../www/src/lib/chess/board.ts",
+    "../www/src/lib/chess/moves.ts",
+    "../www/src/lib/chess/game.ts",
+    "../www/src/lib/room/token.ts"
+  ]
+}
