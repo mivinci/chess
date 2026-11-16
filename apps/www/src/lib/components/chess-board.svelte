@@ -183,22 +183,25 @@
 
     const from = squares[move.from];
     const to = squares[move.to];
-    const lift = pieceType === ELEPHANT ? 30 : 26; // 抛物线顶点抬升，单位是「一格」的百分比
-    const midX = (from.tx + to.tx) / 2;
-    const midY = (from.ty + to.ty) / 2 - lift;
+    // 二次贝塞尔：控制点在起终点中点上方，曲线不过控制点，所以偏移取 lift 两倍
+    const lift = pieceType === ELEPHANT ? 50 : 40;
+    const cx = (from.tx + to.tx) / 2;
+    const cy = (from.ty + to.ty) / 2 - lift;
 
-    node.animate(
-      [
-        { transform: `translate(${from.tx}%, ${from.ty}%)`, offset: 0 },
-        { transform: `translate(${midX}%, ${midY}%)`, offset: 0.5 },
-        { transform: `translate(${to.tx}%, ${to.ty}%)`, offset: 1 }
-      ],
-      {
-        duration: 550,
-        easing: 'cubic-bezier(0.35, 0.05, 0.5, 1)',
-        composite: 'replace'
-      }
-    );
+    // 多帧采样成平滑弧线；三段关键帧会在中点硬拐方向，看着歪歪扭扭
+    const frames = Array.from({ length: 13 }, (_, i) => {
+      const t = i / 12;
+      const u = 1 - t;
+      const x = u * u * from.tx + 2 * u * t * cx + t * t * to.tx;
+      const y = u * u * from.ty + 2 * u * t * cy + t * t * to.ty;
+      return { transform: `translate(${x}%, ${y}%)`, offset: t };
+    });
+
+    node.animate(frames, {
+      duration: 550,
+      easing: 'cubic-bezier(0.35, 0.05, 0.5, 1)',
+      composite: 'replace'
+    });
   });
 
   // 视角固定为玩家执子方：执黑时旋转棋盘，使己方始终在下方
