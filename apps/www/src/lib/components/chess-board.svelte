@@ -188,6 +188,41 @@
     return () => clearTimeout(timer);
   });
 
+  // 全 WAAPI 位移：模板仍写 style:transform（SSR 首屏坐标正确、无闪），
+  // 但坐标变化时的补间由 JS 用 WAAPI 完成，不再依赖 CSS transition。
+  // 动画期间 WAAPI 的值优先于 inline style；结束后 cancel，落回 Svelte 已写入的新坐标。
+  const lastPos = new Map<number, { tx: number; ty: number }>();
+
+  $effect(() => {
+    if (!boardFrame) return;
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    for (const item of pieces) {
+      const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${item.id}"]`);
+      if (!node) continue;
+      const prev = lastPos.get(item.id);
+      if (!prev) {
+        // 首次出现只记录，不补间（否则开局所有棋子都会从 0,0 飞过来）
+        lastPos.set(item.id, { tx: item.tx, ty: item.ty });
+        continue;
+      }
+      if (prev.tx === item.tx && prev.ty === item.ty) continue;
+      lastPos.set(item.id, { tx: item.tx, ty: item.ty });
+      if (reduce) continue;
+
+      const anim = node.animate(
+        [
+          { transform: `translate(${prev.tx}%, ${prev.ty}%)` },
+          { transform: `translate(${item.tx}%, ${item.ty}%)` }
+        ],
+        { duration: MOVE_MS, easing: MOVE_EASE, fill: 'forwards' }
+      );
+      anim.finished.then(() => anim.cancel()).catch(() => {});
+    }
+  });
+
   // 走子动画：棋子被「拎着」平移过去再落下。
   // 选中态本来就是 scale(1.09)（已经抬起），所以走子不再中途重新起飞：
   // 从抬起态开始，全程保持放大平移，到位后落回 1。玩家/AI 走子统一。
@@ -448,9 +483,8 @@
     justify-content: center;
     pointer-events: none;
     z-index: 3;
-    /* transform 走合成层，不触发布局重排；同一个节点坐标改变时补出位移 */
-    transition:
-      transform var(--move-ms, 550ms) var(--move-ease, cubic-bezier(0.45, 0.05, 0.55, 1));
+    /* 位移由 WAAPI 驱动（见上方 lastPos effect），CSS 不再补间 transform。
+       style:transform 仍由 Svelte 写入：SSR 首屏坐标正确，动画结束也落回它。 */
     will-change: transform;
   }
 
