@@ -48,11 +48,15 @@
   // 不再中途重新起飞——选中时已经抬起了，再飞一次是重复的。
   // 用 scale 而非竖直位移：translateY 会把斜向走子的直线轨迹顶歪（往旁边偏）。
   // 和位移共用缓动/时长，offset=1（落回 1）恰好就是到位那一帧。
-  function liftFrames(): Keyframe[] {
+  function liftFrames(isFlipped: boolean): Keyframe[] {
+    // 翻转棋盘下 .piece 靠 CSS `rotate(180deg)` 保持文字正向。
+    // WAAPI 的 composite:'replace' 会整个替换 transform，漏掉这个 rotate
+    // 就会在走子时把棋子转回倒的，动画结束再弹回正向——看起来像"先反转"。
+    const r = isFlipped ? 'rotate(180deg) ' : '';
     return [
-      { transform: 'scale(1.09)', offset: 0 },
-      { transform: 'scale(1.09)', offset: 0.84 },
-      { transform: 'scale(1)', offset: 1 }
+      { transform: `${r}scale(1.09)`, offset: 0 },
+      { transform: `${r}scale(1.09)`, offset: 0.84 },
+      { transform: `${r}scale(1)`, offset: 1 }
     ];
   }
 
@@ -246,7 +250,7 @@
     if (!node) return;
     // 前段维持选中时的 1.09，末段（到位）落回 1。
     // 结束后 cancel 交还 CSS，否则残留的 forwards 会盖住下次选中的 scale。
-    const anim = node.animate(liftFrames(), {
+    const anim = node.animate(liftFrames(flipped), {
       duration: MOVE_MS,
       easing: MOVE_EASE,
       composite: 'replace',
