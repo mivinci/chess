@@ -334,7 +334,7 @@
                         : 'opacity-40'}"
                     >
                       <span class="tabular-nums text-muted-foreground">{Math.floor(i / 2) + 1}.</span>
-                      <span class={i % 2 === 0 ? 'font-medium text-[#d9534f]' : ''}>{notation}</span>
+                      <span class={i % 2 === 0 ? 'font-medium text-[var(--chess-notation-red)]' : ''}>{notation}</span>
                     </div>
                   {/each}
                 </div>

@@ -39,6 +39,54 @@
 :root {
   color-scheme: dark;
   --radius: 0.625rem;
+
+  /* 棋盘与棋子颜色。默认值为原木色/米色，stealth 主题覆盖为黑白。 */
+  --chess-frame-bg: linear-gradient(150deg, #6b4524 0%, #4a2f16 45%, #33200e 100%);
+  --chess-frame-glow: rgba(255, 220, 160, 0.2);
+  --chess-board-bg:
+    repeating-linear-gradient(93deg, rgba(105, 65, 25, 0.055) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(3deg, rgba(120, 78, 32, 0.04) 0 2px, transparent 2px 11px),
+    linear-gradient(145deg, #e7ca9a 0%, #d9b47c 42%, #c79b61 100%);
+  --chess-line: #5a3a1c;
+  --chess-river: #6b4423;
+  --chess-lastmark: rgba(214, 150, 55, 0.55);
+  --chess-hint: #f0b13d;
+  --chess-impact: #fff3d0;
+  --chess-focus: #e2a23c;
+  --chess-red-bg: radial-gradient(circle at 36% 28%, #f8e6c0 0%, #ecd0a0 38%, #d6af77 72%, #ae8049 100%);
+  --chess-black-bg: radial-gradient(circle at 36% 28%, #f8e6c0 0%, #ecd0a0 38%, #d6af77 72%, #ae8049 100%);
+  --chess-red-border: #8b6236;
+  --chess-black-border: #8b6236;
+  --chess-red-fg: #b42318;
+  --chess-black-fg: #2a231c;
+  --chess-piece-shadow:
+    inset 0 2px 3px rgba(255, 248, 225, 0.7),
+    inset 0 -4px 7px rgba(90, 48, 14, 0.38),
+    0 4px 6px rgba(40, 20, 5, 0.5),
+    0 1px 2px rgba(40, 20, 5, 0.4);
+  --chess-piece-shadow-hover:
+    inset 0 2px 3px rgba(255, 248, 225, 0.7),
+    inset 0 -4px 7px rgba(90, 48, 14, 0.38),
+    0 7px 12px rgba(40, 20, 5, 0.5);
+  --chess-piece-shadow-selected:
+    inset 0 2px 3px rgba(255, 248, 225, 0.7),
+    0 0 0 3px #e6a63f,
+    0 0 20px 5px rgba(230, 166, 63, 0.6),
+    0 6px 10px rgba(40, 20, 5, 0.5);
+  --chess-piece-ring: rgba(95, 58, 24, 0.32);
+  --chess-piece-text-shadow: 0 1px 0 rgba(255, 250, 230, 0.5);
+  --chess-flight-shadow: rgba(35, 18, 4, 0.5);
+  --chess-selected-ring: #e6a63f;
+  --chess-selected-glow: rgba(230, 166, 63, 0.6);
+  --chess-checked: #d92d20;
+  --chess-checked-glow: rgba(217, 45, 32, 0.5);
+  --chess-target: rgba(70, 120, 70, 0.42);
+  --chess-target-border: rgba(45, 90, 45, 0.55);
+  --chess-capture: rgba(196, 60, 42, 0.8);
+  --chess-capture-glow: rgba(196, 60, 42, 0.45);
+  /* 棋谱里红方着法的文字色、列表里的棋盘缩略图底色 */
+  --chess-notation-red: #d9534f;
+  --chess-thumb-bg: #e8d3a9;
 }
 
 /* 默认：朱砂。主色/强调色按主题变，红黑棋子与木棋盘保持不变。 */
@@ -84,6 +132,70 @@
   --border: oklch(0.38 0.01 285);
   --input: oklch(0.38 0.01 285);
   --ring: oklch(0.66 0.19 22);
+}
+
+/* 素白（摸鱼）：浅灰白文档风，黑白棋盘与棋子，扫一眼像在看报表 */
+:root[data-theme='stealth'] {
+  color-scheme: light;
+  --background: oklch(0.95 0 0);
+  --foreground: oklch(0.22 0 0);
+  --card: oklch(0.985 0 0);
+  --card-foreground: oklch(0.22 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0 0);
+  --primary: oklch(0.3 0 0);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.92 0 0);
+  --secondary-foreground: oklch(0.25 0 0);
+  --muted: oklch(0.93 0 0);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.9 0 0);
+  --accent-foreground: oklch(0.22 0 0);
+  --destructive: oklch(0.45 0 0);
+  --border: oklch(0.86 0 0);
+  --input: oklch(0.86 0 0);
+  --ring: oklch(0.3 0 0);
+
+  --chess-frame-bg: linear-gradient(150deg, #d6d6d6 0%, #bcbcbc 45%, #a3a3a3 100%);
+  --chess-frame-glow: rgba(255, 255, 255, 0.7);
+  --chess-board-bg: linear-gradient(145deg, #fafafa 0%, #f1f1f1 42%, #e8e8e8 100%);
+  --chess-line: #6b6b6b;
+  --chess-river: #9a9a9a;
+  --chess-lastmark: rgba(60, 60, 60, 0.5);
+  --chess-hint: #4a4a4a;
+  --chess-impact: #ffffff;
+  --chess-focus: #3a3a3a;
+  /* 红方=深灰底白字，黑方=白底深字，保留敌我辨识度 */
+  --chess-red-bg: linear-gradient(145deg, #4a4a4a 0%, #2e2e2e 100%);
+  --chess-black-bg: linear-gradient(145deg, #ffffff 0%, #ececec 100%);
+  --chess-red-border: #1f1f1f;
+  --chess-black-border: #8a8a8a;
+  --chess-red-fg: #ffffff;
+  --chess-black-fg: #1a1a1a;
+  --chess-piece-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 1px 1px rgba(0, 0, 0, 0.18);
+  --chess-piece-shadow-hover:
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    0 5px 9px rgba(0, 0, 0, 0.3);
+  --chess-piece-shadow-selected:
+    0 0 0 3px #3a3a3a,
+    0 0 14px 3px rgba(0, 0, 0, 0.35),
+    0 4px 8px rgba(0, 0, 0, 0.25);
+  --chess-piece-ring: rgba(0, 0, 0, 0.18);
+  --chess-piece-text-shadow: none;
+  --chess-flight-shadow: rgba(0, 0, 0, 0.45);
+  --chess-selected-ring: #3a3a3a;
+  --chess-selected-glow: rgba(0, 0, 0, 0.35);
+  --chess-checked: #1a1a1a;
+  --chess-checked-glow: rgba(0, 0, 0, 0.45);
+  --chess-target: rgba(60, 60, 60, 0.28);
+  --chess-target-border: rgba(40, 40, 40, 0.5);
+  --chess-capture: rgba(30, 30, 30, 0.78);
+  --chess-capture-glow: rgba(30, 30, 30, 0.35);
+  --chess-notation-red: oklch(0.28 0 0);
+  --chess-thumb-bg: oklch(0.9 0 0);
 }
 
 /* 靛蓝月白：冷色底，和暖木棋盘撞色 */

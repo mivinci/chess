@@ -52,12 +52,12 @@
   let soundOn = $state(true);
   let aiPace = $state<'natural' | 'fast'>('natural');
 
-  // 音效跟动画对齐：吃子在砸下瞬间响，普通落子在棋子落定时响。
+  // 音效：吃子在砸下瞬间响（对齐 pounce 430ms）；普通走子点击即响，不拖到落子。
   // 用 AudioBuffer 精确调度，不再 setTimeout + play()，消除手机上 audio.play() 的启动抖动
   function playMove(move: Move | null) {
     if (!soundOn || !move) return;
     const isCapture = move.captured !== 0;
-    const delay = isCapture ? 430 : 540;
+    const delay = isCapture ? 430 : 0;
     if (isCapture) playCaptureSound(delay);
     else playMoveSound(delay);
   }
@@ -302,9 +302,9 @@
               <LoaderCircle class="size-3 animate-spin" />
             {:else if gameStatus === 'playing'}
               {#if currentTurn === RED}
-                <span class="size-2 rounded-full bg-[#b42318]"></span>
+                <span class="size-2 rounded-full bg-[var(--chess-red-fg)]"></span>
               {:else}
-                <span class="size-2 rounded-full bg-[#2a231c] ring-1 ring-white/40"></span>
+                <span class="size-2 rounded-full bg-[var(--chess-black-fg)] ring-1 ring-white/40"></span>
               {/if}
             {:else}
               <Trophy class="size-3" />
@@ -435,9 +435,9 @@
               <span class="text-muted-foreground">你的身份</span>
               <span class="flex items-center gap-1.5">
                 {#if playerSide === RED}
-                  <span class="size-2.5 rounded-full bg-[#b42318]"></span>红方
+                  <span class="size-2.5 rounded-full bg-[var(--chess-red-fg)]"></span>红方
                 {:else}
-                  <span class="size-2.5 rounded-full bg-[#2a231c] ring-1 ring-white/40"></span>黑方
+                  <span class="size-2.5 rounded-full bg-[var(--chess-black-fg)] ring-1 ring-white/40"></span>黑方
                 {/if}
               </span>
             </div>
@@ -460,7 +460,7 @@
             {#each pairs as pair (pair.no)}
               <div class="grid grid-cols-[2rem_1fr_1fr] gap-2 rounded px-2 py-1 odd:bg-muted/50">
                 <span class="tabular-nums text-muted-foreground">{pair.no}.</span>
-                <span class="font-medium text-[#d9534f]">{pair.red}</span>
+                <span class="font-medium text-[var(--chess-notation-red)]">{pair.red}</span>
                 <span>{pair.black}</span>
               </div>
             {:else}

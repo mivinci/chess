@@ -85,12 +85,12 @@
     connected && mySide !== null && turn === mySide && players.length === 2 && status === 'playing'
   );
 
-  // 音效跟动画对齐：吃子在砸下瞬间响，普通落子在棋子落定时响。
+  // 音效：吃子在砸下瞬间响（对齐 pounce 430ms）；普通走子点击即响，不拖到落子。
   // 用 AudioBuffer 精确调度，不再 setTimeout + play()，消除手机上 audio.play() 的启动抖动
   function playMove(move: Move) {
     if (!soundOn) return;
     const isCapture = move.captured !== 0;
-    const delay = isCapture ? 430 : 540;
+    const delay = isCapture ? 430 : 0;
     if (isCapture) playCaptureSound(delay);
     else playMoveSound(delay);
   }
@@ -504,8 +504,8 @@
             <div class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
               <span
                 class="size-2.5 rounded-full {side === RED
-                  ? 'bg-[#b42318]'
-                  : 'bg-[#2a231c] ring-1 ring-white/40'}"
+                  ? 'bg-[var(--chess-red-fg)]'
+                  : 'bg-[var(--chess-black-fg)] ring-1 ring-white/40'}"
               ></span>
               <span class="flex-1">{player?.name ?? '等待加入…'}</span>
               {#if player?.isAI}
@@ -563,7 +563,7 @@
           {#each notations as notation, i}
             <div class="grid grid-cols-[2rem_1fr] gap-2 rounded px-2 py-1 odd:bg-muted/50">
               <span class="tabular-nums text-muted-foreground">{Math.floor(i / 2) + 1}.</span>
-              <span class={i % 2 === 0 ? 'font-medium text-[#d9534f]' : ''}>{notation}</span>
+              <span class={i % 2 === 0 ? 'font-medium text-[var(--chess-notation-red)]' : ''}>{notation}</span>
             </div>
           {:else}
             <p class="py-6 text-center text-xs text-muted-foreground">落子后显示棋谱</p>
