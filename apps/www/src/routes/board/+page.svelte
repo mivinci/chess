@@ -105,7 +105,7 @@
       {#each items as b (b.parentId + ':' + b.step)}
         <Card class="p-4">
           <div class="flex gap-4">
-            <div class="shrink-0 rounded-lg border border-border bg-[#e8d3a9] p-1.5">
+            <div class="shrink-0 rounded-lg border border-border bg-[var(--chess-thumb-bg)] p-1.5">
               <BoardThumb board={b.board} class="h-24 w-auto" />
             </div>
             <div class="min-w-0 flex-1">

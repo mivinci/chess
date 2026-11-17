@@ -71,7 +71,7 @@
         {/each}
       </div>
       <div class="loading-piece">帥</div>
-      <p class="loading-text">正在加载棋盘…</p>
+      <p class="loading-text">正在准备棋盘与音效…</p>
     </div>
   </div>
 {/if}
@@ -164,6 +164,9 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     flex-shrink: 0;
   }
+  :global([data-theme='stealth']) .theme-swatch {
+    border-color: rgba(0, 0, 0, 0.18);
+  }
   .theme-swatch[data-swatch='bamboo'] {
     background: linear-gradient(135deg, #18211d 50%, #7fb894 50%);
   }
@@ -175,6 +178,10 @@
   }
   .theme-swatch[data-swatch='sandalwood'] {
     background: linear-gradient(135deg, #2b2620 50%, #c99a5b 50%);
+  }
+  .theme-swatch[data-swatch='stealth'] {
+    background: linear-gradient(135deg, #2e2e2e 50%, #f5f5f5 50%);
+    border-color: rgba(128, 128, 128, 0.5);
   }
 
   .loading-screen {
@@ -228,8 +235,8 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: #e8d5a8;
-    color: #b42318;
+    background: var(--chess-thumb-bg);
+    color: var(--chess-red-fg);
     font-family: 'ChessKai', var(--font-serif);
     font-size: 26px;
     font-weight: 500;

@@ -44,18 +44,15 @@
   // 短距离走子就成了「先蹦起来、几乎不挪窝、再猛地闪过去」。
   const MOVE_EASE = 'ease-in-out';
 
-  // 抬升做成梯形：拿起 → 端着平移 → 放下，X 的平移交给外层，这里只管 Y。
-  // offset 定义在「位移进度」空间，和位移共用缓动/时长，于是 offset=1（放下贴地）
-  // 恰好就是位移到位的那一帧，落点和到位不会错开。
-  // 抬升高度按走子格数缩放：短距离（兵、士一步）抬得低，免得相对位移显得像抖。
-  function liftFrames(from: number, to: number): Keyframe[] {
-    const steps = Math.max(Math.abs(xOf(to) - xOf(from)), Math.abs(yOf(to) - yOf(from)));
-    const h = Math.min(24, steps * 9);
+  // 走子全程保持选中态的放大（1.09，已经抬起），到位那一帧才落回 1。
+  // 不再中途重新起飞——选中时已经抬起了，再飞一次是重复的。
+  // 用 scale 而非竖直位移：translateY 会把斜向走子的直线轨迹顶歪（往旁边偏）。
+  // 和位移共用缓动/时长，offset=1（落回 1）恰好就是到位那一帧。
+  function liftFrames(): Keyframe[] {
     return [
-      { transform: 'translateY(0)', offset: 0 },
-      { transform: `translateY(-${h}%)`, offset: 0.16 },
-      { transform: `translateY(-${h}%)`, offset: 0.84 },
-      { transform: 'translateY(0)', offset: 1 }
+      { transform: 'scale(1.09)', offset: 0 },
+      { transform: 'scale(1.09)', offset: 0.84 },
+      { transform: 'scale(1)', offset: 1 }
     ];
   }
 
@@ -151,8 +148,12 @@
       duration,
       delay,
       easing: cubicOut,
+      // 被吃方「向下沉」并缩小淡出，绝不向上飞：
+      // 向上飞会飘到吃子方上方，而吃子方落定后已经缩回原尺寸，看着就像被吃方压在它上面（穿模）。
+      // z-index: 1 兜底，保证退场期间永远压在吃子方（z-index 6）下面。
       css: (t: number, u: number) => `
-        transform: ${baseTransform} translateY(${-u * 64}px) translateX(${u * 18}px) rotate(${u * 42}deg) scale(${1 - u * 0.65});
+        z-index: 1;
+        transform: ${baseTransform} translateY(${u * 26}px) rotate(${u * 32}deg) scale(${1 - u * 0.7});
         opacity: ${t};
       `
     };
@@ -187,8 +188,10 @@
     return () => clearTimeout(timer);
   });
 
-  // 走子时棋子水平直线移动（CSS transition），同时整体「飞起来」再落下——只动 Y 的独立一层。
-  // 不做曲线路径：实体棋子是拿起来平移过去放下，不是沿弧线滑。
+  // 走子动画：棋子被「拎着」平移过去再落下。
+  // 选中态本来就是 scale(1.09)（已经抬起），所以走子不再中途重新起飞：
+  // 从抬起态开始，全程保持放大平移，到位后落回 1。玩家/AI 走子统一。
+  // 抬起用 scale 而非竖直位移——俯视 2D 棋盘上 translateY 会让斜向轨迹往旁边偏。
   let flownKey = '';
   $effect(() => {
     const move = lastMove;
@@ -196,7 +199,7 @@
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
       return;
 
-    // 吃子已有 pounce 动画，不再叠加 lift
+    // 吃子已有 pounce 动画，不再叠加抬起
     if (move.captured !== 0) return;
     const id = pieceIds[move.to];
     if (!id) return;
@@ -204,13 +207,17 @@
     if (key === flownKey) return; // 同一走子不重复播
     flownKey = key;
 
-    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece-lift`);
+    const node = boardFrame.querySelector<HTMLElement>(`[data-piece-id="${id}"] .piece`);
     if (!node) return;
-    node.animate(liftFrames(move.from, move.to), {
+    // 前段维持选中时的 1.09，末段（到位）落回 1。
+    // 结束后 cancel 交还 CSS，否则残留的 forwards 会盖住下次选中的 scale。
+    const anim = node.animate(liftFrames(), {
       duration: MOVE_MS,
       easing: MOVE_EASE,
-      composite: 'replace'
+      composite: 'replace',
+      fill: 'forwards'
     });
+    anim.finished.then(() => anim.cancel()).catch(() => {});
   });
 
   // 视角固定为玩家执子方：执黑时旋转棋盘，使己方始终在下方
@@ -225,7 +232,7 @@
     style:--move-ease={MOVE_EASE}
   >
     <svg class="lines" viewBox="0 0 {BOARD_W} {BOARD_H}" aria-hidden="true">
-      <g stroke="#5a3a1c" stroke-width="1.8" fill="none" stroke-linecap="square">
+      <g stroke="var(--chess-line)" stroke-width="1.8" fill="none" stroke-linecap="square">
         {#each rows as y}
           <line x1={MARGIN} y1={y} x2={MARGIN + 8 * SPACING} y2={y} />
         {/each}
@@ -257,7 +264,7 @@
         {/each}
       </g>
       <g
-        fill="#6b4423"
+        fill="var(--chess-river)"
         font-family="ChessKai, STKaiti, Kaiti SC, KaiTi, Songti SC, serif"
         font-size="46"
         text-anchor="middle"
@@ -271,13 +278,13 @@
           cx={MARGIN + xOf(lastMove.from) * SPACING}
           cy={MARGIN + yOf(lastMove.from) * SPACING}
           r="9"
-          fill="rgba(214, 150, 55, 0.55)"
+          fill="var(--chess-lastmark)"
         />
         <circle
           cx={MARGIN + xOf(lastMove.to) * SPACING}
           cy={MARGIN + yOf(lastMove.to) * SPACING}
           r="9"
-          fill="rgba(214, 150, 55, 0.55)"
+          fill="var(--chess-lastmark)"
         />
       {/if}
       {#if impact}
@@ -288,7 +295,7 @@
             cy={impact.y}
             r="18"
             fill="none"
-            stroke="#fff3d0"
+            stroke="var(--chess-impact)"
             stroke-width="7"
           />
           <circle
@@ -296,7 +303,7 @@
             cx={impact.x}
             cy={impact.y}
             r="8"
-            fill="#fff3d0"
+            fill="var(--chess-impact)"
           />
         {/key}
       {/if}
@@ -314,14 +321,14 @@
             y1={hy1 + huy * 34}
             x2={hx2 - hux * 34}
             y2={hy2 - huy * 34}
-            stroke="#f0b13d"
+            stroke="var(--chess-hint)"
             stroke-width="3"
             stroke-dasharray="7 7"
             opacity="0.85"
           />
-          <circle cx={hx1} cy={hy1} r="34" fill="none" stroke="#f0b13d" stroke-width="2.5" opacity="0.8" />
-          <circle cx={hx2} cy={hy2} r="38" fill="none" stroke="#f0b13d" stroke-width="3.5" opacity="0.95" />
-          <circle cx={hx2} cy={hy2} r="44" fill="none" stroke="#f0b13d" stroke-width="1.5" opacity="0.4" />
+          <circle cx={hx1} cy={hy1} r="34" fill="none" stroke="var(--chess-hint)" stroke-width="2.5" opacity="0.8" />
+          <circle cx={hx2} cy={hy2} r="38" fill="none" stroke="var(--chess-hint)" stroke-width="3.5" opacity="0.95" />
+          <circle cx={hx2} cy={hy2} r="44" fill="none" stroke="var(--chess-hint)" stroke-width="1.5" opacity="0.4" />
         </g>
       {/if}
     </svg>
@@ -381,9 +388,9 @@
     margin-inline: auto;
     padding: 6px;
     border-radius: 8px;
-    background: linear-gradient(150deg, #6b4524 0%, #4a2f16 45%, #33200e 100%);
+    background: var(--chess-frame-bg);
     box-shadow:
-      inset 0 1px 0 rgba(255, 220, 160, 0.2),
+      inset 0 1px 0 var(--chess-frame-glow),
       0 8px 20px rgba(0, 0, 0, 0.35);
   }
 
@@ -394,18 +401,7 @@
     container-type: inline-size;
     border-radius: 3px;
     overflow: hidden;
-    background:
-      repeating-linear-gradient(
-        93deg,
-        rgba(105, 65, 25, 0.055) 0 1px,
-        transparent 1px 7px
-      ),
-      repeating-linear-gradient(
-        3deg,
-        rgba(120, 78, 32, 0.04) 0 2px,
-        transparent 2px 11px
-      ),
-      linear-gradient(145deg, #e7ca9a 0%, #d9b47c 42%, #c79b61 100%);
+    background: var(--chess-board-bg);
     transition: transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 
@@ -436,7 +432,7 @@
   }
 
   .square:focus-visible {
-    outline: 2px solid #e2a23c;
+    outline: 2px solid var(--chess-focus);
     outline-offset: -2px;
     border-radius: 50%;
   }
@@ -476,24 +472,14 @@
     width: 90%;
     height: 90%;
     border-radius: 50%;
-    border: 2px solid #8b6236;
+    border: 2px solid var(--piece-border, var(--chess-red-border));
     font-family: 'ChessKai', 'STKaiti', 'Kaiti SC', 'KaiTi', 'Songti SC', 'STSong', serif;
     font-size: 5.6cqw;
     font-weight: 700;
     line-height: 1;
-    background: radial-gradient(
-      circle at 36% 28%,
-      #f8e6c0 0%,
-      #ecd0a0 38%,
-      #d6af77 72%,
-      #ae8049 100%
-    );
-    box-shadow:
-      inset 0 2px 3px rgba(255, 248, 225, 0.7),
-      inset 0 -4px 7px rgba(90, 48, 14, 0.38),
-      0 4px 6px rgba(40, 20, 5, 0.5),
-      0 1px 2px rgba(40, 20, 5, 0.4);
-    text-shadow: 0 1px 0 rgba(255, 250, 230, 0.5);
+    background: var(--piece-bg, var(--chess-red-bg));
+    box-shadow: var(--chess-piece-shadow);
+    text-shadow: var(--chess-piece-text-shadow);
     transition: transform 0.14s ease;
   }
 
@@ -502,16 +488,20 @@
     position: absolute;
     inset: 5%;
     border-radius: 50%;
-    border: 1px solid rgba(95, 58, 24, 0.32);
+    border: 1px solid var(--chess-piece-ring);
     pointer-events: none;
   }
 
   .red {
-    color: #b42318;
+    --piece-bg: var(--chess-red-bg);
+    --piece-border: var(--chess-red-border);
+    color: var(--chess-red-fg);
   }
 
   .black {
-    color: #2a231c;
+    --piece-bg: var(--chess-black-bg);
+    --piece-border: var(--chess-black-border);
+    color: var(--chess-black-fg);
   }
 
   /* 落子瞬间让选中放大立即归位，避免 140ms 回弹叠在位移上看着像偏一下 */
@@ -519,9 +509,10 @@
     transition: none;
   }
 
-  /* 吃子方：只动 transform / opacity，走合成层，避免逐帧重绘阴影 */
+  /* 吃子方：只动 transform / opacity，走合成层，避免逐帧重绘阴影。
+     z-index 拉到 20，被吃方退场期间显式压到 1（见 captureOut），杜绝任何层序反转。 */
   .piece-position.capturing {
-    z-index: 6;
+    z-index: 20;
   }
 
   .piece-position.capturing .piece {
@@ -529,21 +520,23 @@
     will-change: transform;
   }
 
+  /* 吃子放大要始终盖住被吃方：抬升幅度必须小于放大带来的半径增量，
+     否则被吃棋子会从底下露出来（穿模）。砸下帧也不缩到 1 以下。 */
   @keyframes pounce {
     0% {
       transform: translateY(0) scale(1);
     }
     18% {
-      transform: translateY(-38%) scale(1.34);
+      transform: translateY(-14%) scale(1.42);
     }
     70% {
-      transform: translateY(-34%) scale(1.28);
+      transform: translateY(-12%) scale(1.4);
     }
     82% {
-      transform: translateY(10%) scale(0.9);
+      transform: translateY(6%) scale(1.12);
     }
     92% {
-      transform: translateY(-7%) scale(1.07);
+      transform: translateY(-3%) scale(1.08);
     }
     100% {
       transform: translateY(0) scale(1);
@@ -559,16 +552,16 @@
       transform: rotate(180deg) translateY(0) scale(1);
     }
     18% {
-      transform: rotate(180deg) translateY(-38%) scale(1.34);
+      transform: rotate(180deg) translateY(-14%) scale(1.42);
     }
     70% {
-      transform: rotate(180deg) translateY(-34%) scale(1.28);
+      transform: rotate(180deg) translateY(-12%) scale(1.4);
     }
     82% {
-      transform: rotate(180deg) translateY(10%) scale(0.9);
+      transform: rotate(180deg) translateY(6%) scale(1.12);
     }
     92% {
-      transform: rotate(180deg) translateY(-7%) scale(1.07);
+      transform: rotate(180deg) translateY(-3%) scale(1.08);
     }
     100% {
       transform: rotate(180deg) translateY(0) scale(1);
@@ -583,7 +576,7 @@
     width: 76%;
     height: 22%;
     border-radius: 50%;
-    background: rgba(35, 18, 4, 0.5);
+    background: var(--chess-flight-shadow);
     filter: blur(5px);
     pointer-events: none;
     transform-origin: center;
@@ -606,19 +599,12 @@
 
   .piece.hovered {
     transform: translateY(-2px);
-    box-shadow:
-      inset 0 2px 3px rgba(255, 248, 225, 0.7),
-      inset 0 -4px 7px rgba(90, 48, 14, 0.38),
-      0 7px 12px rgba(40, 20, 5, 0.5);
+    box-shadow: var(--chess-piece-shadow-hover);
   }
 
   .piece.selected {
     transform: scale(1.09);
-    box-shadow:
-      inset 0 2px 3px rgba(255, 248, 225, 0.7),
-      0 0 0 3px #e6a63f,
-      0 0 20px 5px rgba(230, 166, 63, 0.6),
-      0 6px 10px rgba(40, 20, 5, 0.5);
+    box-shadow: var(--chess-piece-shadow-selected);
   }
 
   /* 被将军：静态描边 + 只动 transform/opacity 的光环，避免无限重绘阴影 */
@@ -627,8 +613,8 @@
     position: absolute;
     inset: -4px;
     border-radius: 50%;
-    border: 3px solid #d92d20;
-    box-shadow: 0 0 12px 3px rgba(217, 45, 32, 0.5);
+    border: 3px solid var(--chess-checked);
+    box-shadow: 0 0 12px 3px var(--chess-checked-glow);
     pointer-events: none;
     animation: alert 1s ease-in-out infinite;
     will-change: transform, opacity;
@@ -702,8 +688,8 @@
     width: 26%;
     height: 26%;
     border-radius: 50%;
-    background: rgba(70, 120, 70, 0.42);
-    border: 1px solid rgba(45, 90, 45, 0.55);
+    background: var(--chess-target);
+    border: 1px solid var(--chess-target-border);
     pointer-events: none;
   }
 
@@ -711,8 +697,8 @@
     width: 96%;
     height: 96%;
     background: transparent;
-    border: 3px solid rgba(196, 60, 42, 0.8);
-    box-shadow: 0 0 10px rgba(196, 60, 42, 0.45);
+    border: 3px solid var(--chess-capture);
+    box-shadow: 0 0 10px var(--chess-capture-glow);
   }
 
   @media (prefers-reduced-motion: reduce) {
