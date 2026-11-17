@@ -1,4 +1,4 @@
-import { generateLegalMoves, makeMove, unmakeMove } from './moves';
+import { generateLegalMoves, isInCheck, makeMove, unmakeMove } from './moves';
 import {
   ADVISOR,
   CANNON,
@@ -40,8 +40,88 @@ interface Context {
   nodes: number;
 }
 
+/** 对方九宫的格坐标（x 3..5，y 0..2 或 7..9） */
+function inEnemyPalace(x: number, y: number, own: Side): boolean {
+  const relY = own === RED ? y : 9 - y; // 换算成「从自己这边数」的行号
+  return x >= 3 && x <= 5 && relY >= 7;
+}
+
+/**
+ * 残局协同分：子力少了之后，引导 AI 用马、兵配合车做杀，
+ * 而不是单车来回将、_scores 原地打转。
+ * 只在双方重子都少时启用，避免干扰开局布局。
+ */
+function coordinationBonus(board: Board, own: Side): number {
+  const enemy = opponent(own);
+  const enemyKing = board.indexOf(KING * enemy);
+  if (enemyKing < 0) return 0;
+  const ex = xOf(enemyKing);
+  const ey = yOf(enemyKing);
+  const enemyRelY = enemy === RED ? ey : 9 - ey;
+  const enemyAtHome = enemyRelY >= 7;
+
+  // 判断残局：进攻方重子（车/马/炮）不超过 2，或防守方已无车/炮
+  let ownHeavy = 0;
+  let enemyHeavy = 0;
+  for (let i = 0; i < 90; i++) {
+    const p = board[i];
+    if (p === 0) continue;
+    const t = typeOf(p);
+    if (t !== ROOK && t !== KNIGHT && t !== CANNON) continue;
+    if (sideOf(p) === own) ownHeavy++;
+    else enemyHeavy++;
+  }
+  if (ownHeavy === 0 || ownHeavy > 2 || enemyHeavy > 2) return 0;
+
+  let bonus = 0;
+  // 逼对方将离位：将不在底线九宫中央时加分
+  if (!enemyAtHome) bonus += 60;
+  if (ex !== 4) bonus += 25;
+
+  for (let i = 0; i < 90; i++) {
+    const p = board[i];
+    if (p === 0 || sideOf(p) !== own) continue;
+    const t = typeOf(p);
+    const x = xOf(i);
+    const y = yOf(i);
+    const relY = own === RED ? y : 9 - y; // 从自己这边数，越大越靠近对方底线
+
+    switch (t) {
+      case KNIGHT: {
+        // 卧槽 / 挂角：对方九宫侧翼（x=3 或 5）且逼近底线
+        if ((x === 3 || x === 5) && relY >= 6) bonus += 90;
+        else if (x >= 3 && x <= 5 && relY >= 5) bonus += 40;
+        break;
+      }
+      case PAWN: {
+        // 兵逼近对方九宫：越靠近底线越值钱，进入九宫再加
+        if (relY >= 6) bonus += 40 + (relY - 6) * 30;
+        if (inEnemyPalace(x, y, own)) bonus += 70;
+        break;
+      }
+      case ROOK: {
+        // 车控制对方底线（将所在行）：给压制分
+        const enemyBackRank = enemy === RED ? 9 : 0;
+        if (y === enemyBackRank) bonus += 35;
+        // 车与对方将同列且中间无阻挡
+        if (x === ex) {
+          let clear = true;
+          const lo = Math.min(y, ey) + 1;
+          const hi = Math.max(y, ey);
+          for (let yy = lo; yy < hi; yy++) {
+            if (board[yy * 9 + x] !== 0) { clear = false; break; }
+          }
+          if (clear) bonus += 45;
+        }
+        break;
+      }
+    }
+  }
+  return bonus;
+}
+
 function evaluate(board: Board, side: Side): number {
-  let score = 0;
+  let score = coordinationBonus(board, side) - coordinationBonus(board, opponent(side));
   for (let i = 0; i < 90; i++) {
     const piece = board[i];
     if (piece === 0) continue;
@@ -87,13 +167,22 @@ function orderMoves(moves: Move[], board: Board): void {
 }
 
 function quiesce(board: Board, side: Side, alpha: number, beta: number, ply: number): number {
-  const stand = evaluate(board, side);
-  if (ply >= 4) return stand;
-  if (stand >= beta) return beta;
-  if (stand > alpha) alpha = stand;
+  // 被将军时必须搜完所有应将着法，不能停在 stand-pat——
+  // 否则会把「下一手被将死」误判成平静局面，看不到连续将军的杀。
+  const checked = isInCheck(board, side);
+  const stand = checked ? -Infinity : evaluate(board, side);
+  if (ply >= 6) return evaluate(board, side);
+  if (!checked) {
+    if (stand >= beta) return beta;
+    if (stand > alpha) alpha = stand;
+  }
 
-  for (const move of generateLegalMoves(board, side)) {
-    if (move.captured === 0) continue;
+  const moves = generateLegalMoves(board, side);
+  if (moves.length === 0) return -MATE + ply; // 将死 / 困毙
+
+  for (const move of moves) {
+    // 平静局面只延伸吃子；被将军时所有着法都要看（应将）
+    if (!checked && move.captured === 0) continue;
     const moving = board[move.from];
     makeMove(board, move);
     const score = -quiesce(board, opponent(side), -beta, -alpha, ply + 1);
@@ -101,7 +190,8 @@ function quiesce(board: Board, side: Side, alpha: number, beta: number, ply: num
     if (score >= beta) return beta;
     if (score > alpha) alpha = score;
   }
-  return alpha;
+  // 被将军但找不到能改善的着法时，返回 stand-pat 评估（不能留 -Infinity）
+  return alpha === -Infinity ? evaluate(board, side) : alpha;
 }
 
 function negamax(
