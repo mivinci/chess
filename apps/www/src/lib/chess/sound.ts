@@ -86,6 +86,10 @@ export function unlockAudio(): void {
   const ac = audio();
   if (!ac) return;
 
+  // 每次手势都校准一次：macOS 换输出设备（内置扬声器 / 蓝牙 / 外接声卡）会改变
+  // AudioContext 的采样率，之前解好的 buffer 就不再匹配。开销只是两次数值比较。
+  normalizeFor(ac);
+
   if (unlocked) return;
   unlocked = true;
 
@@ -96,8 +100,32 @@ export function unlockAudio(): void {
   src.connect(ac.destination);
   src.start(0);
 
-  // 加载屏已用离线上下文解过码；这里只兜底 fetch 比加载屏更慢的情况（幂等）
-  void decodeAll();
+  // 加载屏已用离线上下文解过码；这里只兜底 fetch 比加载屏更慢的情况（幂等）。
+  // 解完后再按主 ctx 的采样率校准 —— Safari 不会为 AudioBuffer 重采样。
+  void decodeAll().then(() => normalizeFor(ac));
+}
+
+/**
+ * Safari 的已知差异：AudioBuffer 的采样率与 AudioContext 不一致时不会自动重采样，
+ * 播放出来就是无声（Chrome 会自动重采样，所以只在 Safari 复现）。
+ * 拿到真实 ctx 后，把不匹配的 buffer 用主 ctx 重新解一次。
+ */
+function normalizeFor(ac: AudioContext): void {
+  for (const kind of ['move', 'capture'] as const) {
+    const b = buffers[kind];
+    if (!b || b.sampleRate === ac.sampleRate) continue;
+    const data = rawData[kind];
+    if (!data) continue;
+    delete buffers[kind];
+    void ac
+      .decodeAudioData(data.slice(0))
+      .then((decoded) => {
+        buffers[kind] = decoded;
+      })
+      .catch(() => {
+        /* 重解失败就继续用 <audio> 兜底 */
+      });
+  }
 }
 
 /**
@@ -223,18 +251,13 @@ function startBuffer(ac: AudioContext, kind: SoundKind, delayMs: number): void {
 function playScheduled(kind: SoundKind, delayMs: number): void {
   const ac = audio();
   const buffer = buffers[kind];
-  if (ac && buffer) {
-    if (ac.state === 'running') {
-      startBuffer(ac, kind, delayMs);
-      return;
-    }
-    // ctx 不是 running：试着 resume，失败立刻降级到 <audio>，不要静默吞掉
-    ac.resume()
-      .then(() => startBuffer(ac, kind, delayMs))
-      .catch(() => playViaElement(kind, delayMs));
+  // 只有 ctx 已经是 running 才走 Web Audio。
+  // 绝不能在这里 await/resume：没有用户激活时 resume() 永远 pending（既不 resolve 也不 reject），
+  // .then 不执行、.catch 也不触发，播放和兜底会一起被吞掉——表现就是彻底没声。
+  if (ac && buffer && ac.state === 'running') {
+    startBuffer(ac, kind, delayMs);
     return;
   }
-  // 没解码好 / ctx 不可用：<audio> 元素自带解码，不依赖 AudioContext 状态
   playViaElement(kind, delayMs);
 }
 
