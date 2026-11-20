@@ -52,7 +52,9 @@ const KNIGHT_STEPS = [
 ] as const;
 
 function inPalace(x: number, y: number, side: Side): boolean {
-  return x >= 3 && x <= 5 && (side === 1 ? y >= 7 : y <= 2);
+  // 必须同时满足棋盘边界：将帅在底线往外「退」时 y 会变成 10（或 -1），
+  // 只判 y>=7 / y<=2 会生成 idx 越界的着法（93~95、负数），写坏棋盘。
+  return inBoard(x, y) && x >= 3 && x <= 5 && (side === 1 ? y >= 7 : y <= 2);
 }
 
 /** 只按棋子自身规则生成着法，不检查是否自将 */
